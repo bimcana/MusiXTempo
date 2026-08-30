@@ -28,6 +28,23 @@ honesta del audio. Subir ese umbral solo le enseñaría a adivinar.
 
 ---
 
+## Biblioteca
+
+Buscador por título (insensible a mayúsculas y acentos), flechas para mover cada canción una
+posición, y menú de acciones por **pulsación larga**, clic derecho o el botón `⋯` con *Mover
+arriba* (encabeza la lista), *Mover abajo* (al final) y *Borrar*.
+
+Cuatro modos de ordenación: **Mi orden**, **Título**, **BPM** y **Reciente**, recordados entre
+sesiones. El orden manual es *un modo*, no una capa sobre los demás: reordenar a mano dentro de
+una lista alfabética no significa nada, así que las flechas solo actúan en «Mi orden» y la
+pantalla lo dice en vez de dejarlas muertas. Mover a un extremo desde el menú cambia de modo
+automáticamente para que el efecto se vea.
+
+No hay doble toque: distinguirlo obligaría a retrasar 300 ms **cada** apertura de canción, y la
+pulsación larga más el botón `⋯` ya dan el mismo acceso sin ese coste.
+
+---
+
 ## Arrancar
 
 ```bash

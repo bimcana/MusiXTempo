@@ -356,11 +356,12 @@
     <h1>MusixTempo</h1>
     <p class="lede">Escucha lo que suena y dice a qué velocidad va y en qué compás está. El nombre de la canción es secundario.</p>
     <div class="stamp">
-      <span class="chip on">Aprobado</span>
+      <span class="chip on">Fase 1 construida</span>
       <span class="chip">PWA instalable</span>
       <span class="chip">Micrófono</span>
       <span class="chip">Offline</span>
-      <span class="chip">Fase 1 de 3</span>
+      <span class="chip on">96,7 % Accuracy 1</span>
+      <span class="chip on">6/8 al 100 %</span>
     </div>
 
     <div class="demo">
@@ -453,6 +454,7 @@
       <div class="card">
         <p class="eyebrow">③ Biblioteca</p>
         <p>Las canciones guardadas. Al tocar una se abre el metrónomo con su tempo y su compás ya cargados, con selector de sonido y groove. Alta manual con tap tempo.</p>
+        <p>Buscador por título, flechas para reordenar y modos de ordenación. <strong>El orden manual es un modo, no una capa</strong>: reordenar a mano dentro de una lista alfabética no significa nada, así que las flechas solo actúan en «Mi orden» — y la pantalla lo dice en vez de dejarlas muertas.</p>
       </div>
     </div>
 
@@ -582,6 +584,49 @@
       <li><strong>Métricas estándar del campo:</strong> <em>Accuracy 1</em> (±4 % del BPM real), <em>Accuracy 2</em> (tolera errores de octava), F-measure de beats, y la métrica como matriz de confusión con la celda 6/8 ↔ 4/4 vigilada explícitamente.</li>
       <li><strong>Umbral de regresión en CI.</strong> Un cambio que baje Accuracy 1 o empeore la celda 6/8 rompe la build. Sin esto, «mejorar la precisión» es una opinión.</li>
     </ul>
+
+    <h3>Lo que dio</h3>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Escenario</th><th>Accuracy 1</th><th>Accuracy 2</th><th>Métrica</th><th>6/8</th><th>4/4</th></tr>
+        </thead>
+        <tbody>
+          <tr class="hot">
+            <td>Material completo</td>
+            <td class="num"><strong>96,7 %</strong></td><td class="num">100 %</td>
+            <td class="num"><strong>90,0 %</strong></td><td class="num"><strong>100 %</strong></td><td class="num">80 %</td>
+          </tr>
+          <tr>
+            <td>Solo batería, sin armonía</td>
+            <td class="num">93,3 %</td><td class="num">100 %</td>
+            <td class="num">46,7 %</td><td class="num">87,5 %</td><td class="num">0 %</td>
+          </tr>
+          <tr>
+            <td>Sala hostil</td>
+            <td class="num">70,0 %</td><td class="num">100 %</td>
+            <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          </tr>
+          <tr>
+            <td>Tarareo, sin percusión</td>
+            <td class="num">71,4 %</td><td class="num">100 %</td>
+            <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          </tr>
+          <tr class="hot">
+            <td>6/8 contra 4/4 con swing</td>
+            <td class="num">—</td><td class="num">—</td>
+            <td class="num"><strong>6 de 6</strong></td><td class="num">—</td><td class="num">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Error medio de tempo: <strong>1,84 %</strong>. Tres decisiones movieron casi toda la aguja, y las tres salieron de mirar los fallos en vez de ajustar pesos a ciegas.</p>
+    <ul>
+      <li><strong>Discriminante de octava.</strong> Un pulso real pesa más que su subdivisión; cuando pesan lo mismo, el candidato va un nivel por debajo. Sin este término el motor se iba <em>sistemáticamente</em> a media velocidad — a medio tempo el beat verdadero cae justo en la mitad y la evidencia de subdivisión sale, engañosamente, perfecta.</li>
+      <li><strong>Agregación por intervalo.</strong> Lo que distingue la primera mitad de un compás de la segunda suele estar <em>entre</em> los tiempos. Muestreando solo en el instante del beat eso no se ve nunca.</li>
+      <li><strong>Sesgo de selección en la agrupación.</strong> Agrupar en 4 prueba el doble de fases que agrupar en 2, y en 7 prueba siete: con ruido, las agrupaciones grandes ganaban gratis. De ahí salían los 12/8 falsos y los 7/8 de la nada.</li>
+    </ul>
+    <p>El <code>4/4 → 2/4</code> sin armonía se deja como está, a propósito: con el bombo cayendo igual en los tiempos 1 y 3 y sin nada tonal, las dos lecturas <strong>suenan igual</strong>. Subir ese umbral solo le enseñaría al motor a adivinar.</p>
   </section>
 
   <div class="rule"></div>
