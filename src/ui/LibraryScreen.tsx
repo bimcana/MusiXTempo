@@ -1,13 +1,13 @@
 /**
  * Biblioteca: lo detectado y lo dado de alta a mano, todo local.
  *
- * Busqueda, orden manual con flechas y modos de ordenacion. El orden
+ * Busqueda, orden manual por arrastre y modos de ordenacion. El orden
  * manual es UN modo, no una capa sobre los demas: reordenar a mano
- * dentro de una lista ordenada por titulo no significa nada, asi que
- * las flechas solo actuan en "Mi orden".
+ * dentro de una lista ordenada por titulo no significa nada, asi que la
+ * empunadura solo arrastra en "Mi orden".
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   formatTimeSignature,
   meterLabel,
@@ -19,6 +19,7 @@ import { DEFAULT_PACK_ID } from '../metronome/packs';
 import { SORT_LABELS, useApp, type SortMode } from '../state/store';
 import type { Song } from '../data/db';
 import { MeterPicker, TapTempo } from './components';
+import { useDragReorder } from './useDragReorder';
 
 const SORT_MODES: SortMode[] = ['manual', 'title', 'bpm', 'recent'];
 
@@ -36,6 +37,7 @@ export function LibraryScreen() {
   const songs = useApp((s) => s.songs);
   const visibleSongs = useApp((s) => s.visibleSongs);
 
+  const reorderTo = useApp((s) => s.reorderTo);
   const [adding, setAdding] = useState(false);
   const [menuFor, setMenuFor] = useState<Song | null>(null);
 
@@ -43,11 +45,20 @@ export function LibraryScreen() {
     if (!loaded) void loadLibrary();
   }, [loaded, loadLibrary]);
 
-  if (adding) return <ManualForm onDone={() => setAdding(false)} />;
-
   const visible = visibleSongs();
   void songs;
-  const reorderable = sortMode === 'manual' && !query;
+  const reorderable = sortMode === 'manual';
+
+  const commit = useCallback(
+    (from: number, to: number) => {
+      const song = visible[from];
+      if (song) void reorderTo(song.id, to);
+    },
+    [visible, reorderTo]
+  );
+  const drag = useDragReorder(visible.length, commit);
+
+  if (adding) return <ManualForm onDone={() => setAdding(false)} />;
 
   return (
     <div className="flex flex-1 flex-col gap-3 px-5 pt-2 pb-8">
@@ -102,12 +113,14 @@ export function LibraryScreen() {
             ))}
           </div>
 
-          {!reorderable && (
-            <p className="text-xs text-muted">
-              {query
-                ? 'Las flechas mueven dentro de la búsqueda. Límpiala para reordenar toda la lista.'
-                : 'Cambia a «Mi orden» para reordenar a mano.'}
-            </p>
+          {!reorderable ? (
+            <p className="text-xs text-muted">Cambia a «Mi orden» para reordenar a mano.</p>
+          ) : (
+            visible.length > 1 && (
+              <p className="text-xs text-muted">
+                Arrastra desde los puntos para mover. Mantén pulsada una canción para más opciones.
+              </p>
+            )
           )}
         </>
       )}
@@ -128,14 +141,16 @@ export function LibraryScreen() {
       ) : visible.length === 0 ? (
         <p className="mt-6 text-center text-muted">Nada coincide con «{query}».</p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul ref={drag.listRef} className="flex flex-col gap-2">
           {visible.map((song, index) => (
             <SongRow
               key={song.id}
               song={song}
               index={index}
               count={visible.length}
-              arrowsEnabled={sortMode === 'manual'}
+              draggable={reorderable}
+              isDragging={drag.dragging === index}
+              onGrab={(event) => drag.begin(index, event)}
               onOpen={() => openSong(song.id)}
               onOptions={() => setMenuFor(song)}
             />
@@ -156,12 +171,14 @@ function SongRow(props: {
   song: Song;
   index: number;
   count: number;
-  arrowsEnabled: boolean;
+  draggable: boolean;
+  isDragging: boolean;
+  onGrab: (event: React.PointerEvent) => void;
   onOpen: () => void;
   onOptions: () => void;
 }) {
   const moveSong = useApp((s) => s.moveSong);
-  const { song, index, count, arrowsEnabled } = props;
+  const { song, index, count, draggable, isDragging } = props;
 
   // Pulsacion larga: 500 ms sin soltar ni arrastrar. Se marca que
   // disparo para que el `click` que llega despues no abra la cancion.
@@ -188,21 +205,31 @@ function SongRow(props: {
   useEffect(() => cancelHold, []);
 
   return (
-    <li className="flex items-stretch gap-2">
-      <div className="flex w-9 shrink-0 flex-col gap-1">
-        <ArrowButton
-          direction="up"
-          disabled={!arrowsEnabled || index === 0}
-          onClick={() => void moveSong(song.id, -1)}
-          label={'Subir ' + song.title}
-        />
-        <ArrowButton
-          direction="down"
-          disabled={!arrowsEnabled || index === count - 1}
-          onClick={() => void moveSong(song.id, 1)}
-          label={'Bajar ' + song.title}
-        />
-      </div>
+    <li className={'relative flex items-stretch gap-2' + (isDragging ? ' opacity-95' : '')}>
+      <GripHandle
+        disabled={!draggable}
+        active={isDragging}
+        label={'Reordenar ' + song.title}
+        position={index + 1}
+        total={count}
+        onPointerDown={(event) => {
+          if (!draggable || event.button !== 0) return;
+          event.preventDefault();
+          props.onGrab(event);
+        }}
+        onKeyDown={(event) => {
+          // El teclado sigue moviendo de uno en uno: es el unico modo
+          // preciso, y el arrastre no existe sin puntero.
+          if (!draggable) return;
+          if (event.key === 'ArrowUp' && index > 0) {
+            event.preventDefault();
+            void moveSong(song.id, -1);
+          } else if (event.key === 'ArrowDown' && index < count - 1) {
+            event.preventDefault();
+            void moveSong(song.id, 1);
+          }
+        }}
+      />
 
       <button
         type="button"
@@ -248,26 +275,57 @@ function SongRow(props: {
   );
 }
 
-function ArrowButton(props: {
-  direction: 'up' | 'down';
+/**
+ * Empunadura de seis puntos: la senal universal de "esto se arrastra".
+ * Dos columnas por tres filas, sin flechas — porque no mueve un paso por
+ * toque, mueve lo que el dedo recorra.
+ *
+ * `touch-action: none` es obligatorio: sin el, el navegador se queda el
+ * gesto vertical para desplazar la pagina y el arrastre nunca empieza.
+ */
+function GripHandle(props: {
   disabled: boolean;
-  onClick: () => void;
+  active: boolean;
   label: string;
+  position: number;
+  total: number;
+  onPointerDown: (event: React.PointerEvent) => void;
+  onKeyDown: (event: React.KeyboardEvent) => void;
 }) {
   return (
     <button
       type="button"
-      onClick={props.onClick}
       disabled={props.disabled}
       aria-label={props.label}
+      aria-describedby={undefined}
+      title={props.disabled ? undefined : 'Arrastra para mover'}
+      onPointerDown={props.onPointerDown}
+      onKeyDown={props.onKeyDown}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{ touchAction: 'none' }}
       className={
-        'flex flex-1 items-center justify-center rounded border text-xs transition-colors ' +
+        'flex w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ' +
         (props.disabled
-          ? 'border-line-soft bg-surface text-line'
-          : 'border-line bg-surface-2 text-signal active:border-signal')
+          ? 'border-line-soft bg-surface'
+          : props.active
+            ? 'border-signal bg-signal-dim'
+            : 'border-line bg-surface-2 active:border-signal')
       }
     >
-      {props.direction === 'up' ? '▲' : '▼'}
+      <span className="sr-only">
+        {props.position} de {props.total}
+      </span>
+      <span className="grid grid-cols-2 gap-[4px]" aria-hidden="true">
+        {Array.from({ length: 6 }, (_, i) => (
+          <span
+            key={i}
+            className={
+              'block h-[3.5px] w-[3.5px] rounded-full ' +
+              (props.disabled ? 'bg-line' : props.active ? 'bg-signal' : 'bg-muted')
+            }
+          />
+        ))}
+      </span>
     </button>
   );
 }

@@ -68,6 +68,7 @@ interface AppState {
   updateSong: (song: Song) => Promise<void>;
   removeSong: (id: string) => Promise<void>;
   moveSong: (id: string, direction: -1 | 1) => Promise<void>;
+  reorderTo: (id: string, targetIndex: number) => Promise<void>;
   moveToEdge: (id: string, edge: 'top' | 'bottom') => Promise<void>;
   openSong: (id: string) => void;
 }
@@ -197,6 +198,52 @@ export const useApp = create<AppState>((set, get) => ({
       putSong({ ...a, order: b.order }),
       putSong({ ...b, order: a.order })
     ]);
+  },
+
+  /**
+   * Coloca la cancion en una posicion concreta de la lista visible. Es
+   * lo que usa el arrastre: se mueve TANTO como el dedo recorra, no una
+   * posicion por gesto.
+   *
+   * El nuevo `order` es el punto medio entre los dos vecinos del destino.
+   * Cuando el hueco se agota tras muchos reordenamientos, se renumera la
+   * lista entera una vez y se vuelve a intentar.
+   */
+  reorderTo: async (id, targetIndex) => {
+    const visible = get().visibleSongs();
+    const from = visible.findIndex((s) => s.id === id);
+    if (from < 0 || targetIndex === from) return;
+
+    const target = Math.max(0, Math.min(visible.length - 1, targetIndex));
+    const without = visible.filter((s) => s.id !== id);
+    const before = without[target - 1];
+    const after = without[target];
+
+    let order: number;
+    if (!before) order = (after?.order ?? 0) - ORDER_GAP;
+    else if (!after) order = before.order + ORDER_GAP;
+    else order = (before.order + after.order) / 2;
+
+    // Sin hueco entre vecinos, el punto medio deja de separar: hay que
+    // renumerar antes de colocar.
+    if (before && after && Math.abs(after.order - before.order) < 2) {
+      const spread = without.map((song, index) => ({ ...song, order: index * ORDER_GAP }));
+      const b = spread[target - 1];
+      const a = spread[target];
+      const moved = {
+        ...visible[from],
+        order: a ? (b.order + a.order) / 2 : b.order + ORDER_GAP
+      };
+      const byId = new Map(spread.map((song) => [song.id, song] as const));
+      byId.set(moved.id, moved);
+      set({ songs: get().songs.map((song) => byId.get(song.id) ?? song) });
+      await Promise.all([...spread, moved].map((song) => putSong(song)));
+      return;
+    }
+
+    const moved = { ...visible[from], order };
+    set({ songs: get().songs.map((song) => (song.id === id ? moved : song)) });
+    await putSong(moved);
   },
 
   moveToEdge: async (id, edge) => {

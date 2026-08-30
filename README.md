@@ -30,18 +30,27 @@ honesta del audio. Subir ese umbral solo le enseñaría a adivinar.
 
 ## Biblioteca
 
-Buscador por título (insensible a mayúsculas y acentos), flechas para mover cada canción una
-posición, y menú de acciones por **pulsación larga**, clic derecho o el botón `⋯` con *Mover
-arriba* (encabeza la lista), *Mover abajo* (al final) y *Borrar*.
+Buscador por título (insensible a mayúsculas y acentos) y **reordenación por arrastre** desde la
+empuñadura de seis puntos: la fila sigue al dedo y las demás se apartan en vivo, así que una
+canción va del final al principio en **un solo gesto**, no una posición por toque. Con
+autodesplazamiento al acercarse a los bordes, para listas más largas que la pantalla.
+
+Todo el movimiento se aplica como `transform` directamente sobre el DOM — React no vuelve a
+renderizar en ningún frame del arrastre. Un reorder que provoque un render por movimiento de
+dedo se siente pegajoso en móvil, que es justo lo que el control existe para evitar.
+
+Menú de acciones por **pulsación larga**, clic derecho o el botón `⋯`, con *Mover arriba*
+(encabeza la lista), *Mover abajo* (al final) y *Borrar*. Con teclado, las flechas sobre la
+empuñadura mueven de una en una: es el único modo preciso, y sin puntero no hay arrastre.
 
 Cuatro modos de ordenación: **Mi orden**, **Título**, **BPM** y **Reciente**, recordados entre
 sesiones. El orden manual es *un modo*, no una capa sobre los demás: reordenar a mano dentro de
-una lista alfabética no significa nada, así que las flechas solo actúan en «Mi orden» y la
-pantalla lo dice en vez de dejarlas muertas. Mover a un extremo desde el menú cambia de modo
+una lista alfabética no significa nada, así que la empuñadura solo arrastra en «Mi orden» y la
+pantalla lo dice en vez de dejarla muerta. Mover a un extremo desde el menú cambia de modo
 automáticamente para que el efecto se vea.
 
-No hay doble toque: distinguirlo obligaría a retrasar 300 ms **cada** apertura de canción, y la
-pulsación larga más el botón `⋯` ya dan el mismo acceso sin ese coste.
+La posición vive en un campo `order` con huecos de mil entre canciones, así que soltar una fila
+escribe **una** fila; solo se renumera la lista cuando el hueco entre dos vecinas se agota.
 
 ---
 
