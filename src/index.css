@@ -24,51 +24,63 @@
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 }
 
-html,
-body,
-#root {
-  height: 100%;
+/*
+ * Los resets van DENTRO de @layer base. Fuera de capa ganarian a todas
+ * las utilidades de Tailwind sin importar la especificidad — asi que un
+ * `button { color: inherit }` suelto anula cualquier `text-*` aplicada a
+ * un boton, en toda la aplicacion y sin avisar.
+ */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    /* Una app de metronomo no se arrastra ni hace zoom por accidente. */
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input,
+  textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 2px;
+  }
 }
 
-body {
-  margin: 0;
-  background: var(--color-ground);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  /* Una app de metronomo no se arrastra ni hace zoom por accidente. */
-  overscroll-behavior: none;
-  -webkit-tap-highlight-color: transparent;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-input,
-textarea {
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-button {
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-:focus-visible {
-  outline: 2px solid var(--color-signal);
-  outline-offset: 2px;
-}
-
-.tabular {
+@utility tabular {
   font-variant-numeric: tabular-nums;
 }
 
-.safe-top {
+@utility safe-top {
   padding-top: max(1rem, env(safe-area-inset-top));
 }
 
-.safe-bottom {
+@utility safe-bottom {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 

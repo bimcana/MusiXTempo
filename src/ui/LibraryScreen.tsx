@@ -1,22 +1,43 @@
 /**
  * Biblioteca: lo detectado y lo dado de alta a mano, todo local.
+ *
+ * Busqueda, orden manual con flechas y modos de ordenacion. El orden
+ * manual es UN modo, no una capa sobre los demas: reordenar a mano
+ * dentro de una lista ordenada por titulo no significa nada, asi que
+ * las flechas solo actuan en "Mi orden".
  */
 
-import { useEffect, useState } from 'react';
-import { formatTimeSignature, meterLabel, subdivisionsPerPulse, type TimeSignature } from '../dsp/meter';
+import { useEffect, useRef, useState } from 'react';
+import {
+  formatTimeSignature,
+  meterLabel,
+  subdivisionsPerPulse,
+  type TimeSignature
+} from '../dsp/meter';
 import { optionsFor } from '../metronome/grooves';
 import { DEFAULT_PACK_ID } from '../metronome/packs';
-import { useApp } from '../state/store';
+import { SORT_LABELS, useApp, type SortMode } from '../state/store';
+import type { Song } from '../data/db';
 import { MeterPicker, TapTempo } from './components';
 
+const SORT_MODES: SortMode[] = ['manual', 'title', 'bpm', 'recent'];
+
 export function LibraryScreen() {
-  const songs = useApp((s) => s.songs);
   const loaded = useApp((s) => s.loaded);
   const loadLibrary = useApp((s) => s.loadLibrary);
   const openSong = useApp((s) => s.openSong);
-  const removeSong = useApp((s) => s.removeSong);
   const go = useApp((s) => s.go);
+  const query = useApp((s) => s.query);
+  const setQuery = useApp((s) => s.setQuery);
+  const sortMode = useApp((s) => s.sortMode);
+  const setSortMode = useApp((s) => s.setSortMode);
+  const total = useApp((s) => s.songs.length);
+  // Se resuscribe a `songs` para recalcular cuando cambia el orden.
+  const songs = useApp((s) => s.songs);
+  const visibleSongs = useApp((s) => s.visibleSongs);
+
   const [adding, setAdding] = useState(false);
+  const [menuFor, setMenuFor] = useState<Song | null>(null);
 
   useEffect(() => {
     if (!loaded) void loadLibrary();
@@ -24,8 +45,12 @@ export function LibraryScreen() {
 
   if (adding) return <ManualForm onDone={() => setAdding(false)} />;
 
+  const visible = visibleSongs();
+  void songs;
+  const reorderable = sortMode === 'manual' && !query;
+
   return (
-    <div className="flex flex-1 flex-col gap-4 px-5 pt-2 pb-8">
+    <div className="flex flex-1 flex-col gap-3 px-5 pt-2 pb-8">
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Biblioteca</h1>
         <button
@@ -37,7 +62,57 @@ export function LibraryScreen() {
         </button>
       </header>
 
-      {songs.length === 0 ? (
+      {total > 0 && (
+        <>
+          <div className="relative">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar por título"
+              type="search"
+              className="w-full rounded-lg border border-line bg-surface py-2.5 pr-10 pl-4 outline-none placeholder:text-muted focus:border-signal"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Limpiar búsqueda"
+                className="absolute top-1/2 right-2 -translate-y-1/2 px-2 py-1 text-muted"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {SORT_MODES.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setSortMode(mode)}
+                className={
+                  'rounded border px-3 py-1.5 text-sm transition-colors ' +
+                  (mode === sortMode
+                    ? 'border-signal bg-signal-dim text-signal'
+                    : 'border-line bg-surface text-muted')
+                }
+              >
+                {SORT_LABELS[mode]}
+              </button>
+            ))}
+          </div>
+
+          {!reorderable && (
+            <p className="text-xs text-muted">
+              {query
+                ? 'Las flechas mueven dentro de la búsqueda. Límpiala para reordenar toda la lista.'
+                : 'Cambia a «Mi orden» para reordenar a mano.'}
+            </p>
+          )}
+        </>
+      )}
+
+      {total === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
           <p className="max-w-xs text-muted">
             Todavía no hay nada. Detecta una canción o añádela a mano.
@@ -50,47 +125,246 @@ export function LibraryScreen() {
             Ir a escuchar
           </button>
         </div>
+      ) : visible.length === 0 ? (
+        <p className="mt-6 text-center text-muted">Nada coincide con «{query}».</p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {songs.map((song) => (
-            <li key={song.id}>
-              <div className="flex items-stretch gap-2">
-                <button
-                  type="button"
-                  onClick={() => openSong(song.id)}
-                  className="flex flex-1 items-center justify-between rounded-lg border border-line bg-surface px-4 py-3 text-left transition-colors active:border-signal"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{song.title}</span>
-                    <span className="text-xs text-muted">
-                      {song.source === 'manual' ? 'A mano' : 'Detectada'}
-                      {song.source === 'detected' &&
-                        ' · ' + Math.round(song.confidence * 100) + ' % confianza'}
-                    </span>
-                  </span>
-                  <span className="ml-3 shrink-0 text-right">
-                    <span className="tabular block text-xl font-semibold">
-                      {song.bpm.toFixed(1)}
-                    </span>
-                    <span className="text-xs text-signal">{meterLabel(song.meter)}</span>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void removeSong(song.id)}
-                  aria-label={'Borrar ' + song.title}
-                  className="w-12 shrink-0 rounded-lg border border-line bg-surface text-muted active:border-danger active:text-danger"
-                >
-                  ✕
-                </button>
-              </div>
-            </li>
+          {visible.map((song, index) => (
+            <SongRow
+              key={song.id}
+              song={song}
+              index={index}
+              count={visible.length}
+              arrowsEnabled={sortMode === 'manual'}
+              onOpen={() => openSong(song.id)}
+              onOptions={() => setMenuFor(song)}
+            />
           ))}
         </ul>
       )}
+
+      {menuFor && <OptionsSheet song={menuFor} onClose={() => setMenuFor(null)} />}
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Fila                                                                */
+/* ------------------------------------------------------------------ */
+
+function SongRow(props: {
+  song: Song;
+  index: number;
+  count: number;
+  arrowsEnabled: boolean;
+  onOpen: () => void;
+  onOptions: () => void;
+}) {
+  const moveSong = useApp((s) => s.moveSong);
+  const { song, index, count, arrowsEnabled } = props;
+
+  // Pulsacion larga: 500 ms sin soltar ni arrastrar. Se marca que
+  // disparo para que el `click` que llega despues no abra la cancion.
+  const timer = useRef<number | null>(null);
+  const firedLong = useRef(false);
+
+  const cancelHold = () => {
+    if (timer.current !== null) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+
+  const startHold = () => {
+    firedLong.current = false;
+    cancelHold();
+    timer.current = window.setTimeout(() => {
+      firedLong.current = true;
+      if (navigator.vibrate) navigator.vibrate(12);
+      props.onOptions();
+    }, 500);
+  };
+
+  useEffect(() => cancelHold, []);
+
+  return (
+    <li className="flex items-stretch gap-2">
+      <div className="flex w-9 shrink-0 flex-col gap-1">
+        <ArrowButton
+          direction="up"
+          disabled={!arrowsEnabled || index === 0}
+          onClick={() => void moveSong(song.id, -1)}
+          label={'Subir ' + song.title}
+        />
+        <ArrowButton
+          direction="down"
+          disabled={!arrowsEnabled || index === count - 1}
+          onClick={() => void moveSong(song.id, 1)}
+          label={'Bajar ' + song.title}
+        />
+      </div>
+
+      <button
+        type="button"
+        onPointerDown={startHold}
+        onPointerUp={cancelHold}
+        onPointerLeave={cancelHold}
+        onPointerCancel={cancelHold}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          props.onOptions();
+        }}
+        onClick={() => {
+          if (firedLong.current) {
+            firedLong.current = false;
+            return;
+          }
+          props.onOpen();
+        }}
+        className="flex flex-1 items-center justify-between rounded-lg border border-line bg-surface px-4 py-3 text-left transition-colors active:border-signal"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-medium">{song.title}</span>
+          <span className="text-xs text-muted">
+            {song.source === 'manual' ? 'A mano' : 'Detectada'}
+            {song.source === 'detected' && ' · ' + Math.round(song.confidence * 100) + ' % confianza'}
+          </span>
+        </span>
+        <span className="ml-3 shrink-0 text-right">
+          <span className="tabular block text-xl font-semibold">{song.bpm.toFixed(1)}</span>
+          <span className="text-xs text-signal">{meterLabel(song.meter)}</span>
+        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={props.onOptions}
+        aria-label={'Opciones de ' + song.title}
+        className="w-10 shrink-0 rounded-lg border border-line bg-surface text-lg text-muted"
+      >
+        ⋯
+      </button>
+    </li>
+  );
+}
+
+function ArrowButton(props: {
+  direction: 'up' | 'down';
+  disabled: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      aria-label={props.label}
+      className={
+        'flex flex-1 items-center justify-center rounded border text-xs transition-colors ' +
+        (props.disabled
+          ? 'border-line-soft bg-surface text-line'
+          : 'border-line bg-surface-2 text-signal active:border-signal')
+      }
+    >
+      {props.direction === 'up' ? '▲' : '▼'}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Hoja de opciones                                                    */
+/* ------------------------------------------------------------------ */
+
+function OptionsSheet({ song, onClose }: { song: Song; onClose: () => void }) {
+  const moveToEdge = useApp((s) => s.moveToEdge);
+  const removeSong = useApp((s) => s.removeSong);
+  const sortMode = useApp((s) => s.sortMode);
+  const setSortMode = useApp((s) => s.setSortMode);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const jump = async (edge: 'top' | 'bottom') => {
+    // Mover al extremo solo se ve si la lista esta en orden manual, asi
+    // que se cambia de modo en vez de dejar al usuario sin feedback.
+    if (sortMode !== 'manual') setSortMode('manual');
+    await moveToEdge(song.id, edge);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <button
+        type="button"
+        aria-label="Cerrar"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/60"
+      />
+      <div className="safe-bottom relative mx-auto w-full max-w-lg rounded-t-2xl border-t border-line bg-surface p-4">
+        <p className="mb-3 truncate px-1 text-sm text-muted">{song.title}</p>
+        <div className="flex flex-col gap-1.5">
+          <SheetItem
+            title="Mover arriba"
+            hint="Encabeza la lista"
+            onClick={() => void jump('top')}
+          />
+          <SheetItem
+            title="Mover abajo"
+            hint="Al final de la lista"
+            onClick={() => void jump('bottom')}
+          />
+          <SheetItem
+            title="Borrar"
+            hint="No se puede deshacer"
+            danger
+            onClick={() => {
+              void removeSong(song.id);
+              onClose();
+            }}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-3 w-full rounded-lg border border-line bg-surface-2 py-3 text-sm tracking-[0.14em] text-muted uppercase"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SheetItem(props: {
+  title: string;
+  hint: string;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className={
+        'rounded-lg border border-line bg-surface-2 px-4 py-3 text-left transition-colors active:border-signal ' +
+        (props.danger ? 'text-danger' : '')
+      }
+    >
+      <span className="block font-medium">{props.title}</span>
+      <span className="block text-xs text-muted">{props.hint}</span>
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Alta manual                                                         */
+/* ------------------------------------------------------------------ */
 
 function ManualForm({ onDone }: { onDone: () => void }) {
   const addManual = useApp((s) => s.addManual);

@@ -20,6 +20,12 @@ export interface Song {
   packId: string;
   grooveId: string;
   source: 'detected' | 'manual';
+  /**
+   * Posicion en el orden manual. Menor va antes. Se deja hueco entre
+   * valores para que mover al principio o al final sea escribir UNA
+   * fila, no renumerar la biblioteca entera.
+   */
+  order: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -28,7 +34,7 @@ interface MusixTempoDB extends DBSchema {
   songs: {
     key: string;
     value: Song;
-    indexes: { 'by-created': number };
+    indexes: { 'by-created': number; 'by-order': number };
   };
   settings: {
     key: string;
@@ -40,16 +46,33 @@ let dbPromise: Promise<IDBPDatabase<MusixTempoDB>> | null = null;
 
 function db(): Promise<IDBPDatabase<MusixTempoDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<MusixTempoDB>('musixtempo', 1, {
-      upgrade(database) {
-        const songs = database.createObjectStore('songs', { keyPath: 'id' });
-        songs.createIndex('by-created', 'createdAt');
-        database.createObjectStore('settings');
+    dbPromise = openDB<MusixTempoDB>('musixtempo', 2, {
+      async upgrade(database, oldVersion, _newVersion, tx) {
+        if (oldVersion < 1) {
+          const songs = database.createObjectStore('songs', { keyPath: 'id' });
+          songs.createIndex('by-created', 'createdAt');
+          database.createObjectStore('settings');
+        }
+        if (oldVersion < 2) {
+          const store = tx.objectStore('songs');
+          store.createIndex('by-order', 'order');
+          // Las canciones que ya existian heredan el orden que tenian en
+          // pantalla: de mas reciente a mas antigua.
+          const existing = await store.getAll();
+          existing.sort((a, b) => b.createdAt - a.createdAt);
+          let position = 0;
+          for (const song of existing) {
+            await store.put({ ...song, order: position++ * ORDER_GAP });
+          }
+        }
       }
     });
   }
   return dbPromise;
 }
+
+/** Separacion entre posiciones consecutivas del orden manual. */
+export const ORDER_GAP = 1000;
 
 export function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
@@ -57,8 +80,20 @@ export function newId(): string {
 }
 
 export async function listSongs(): Promise<Song[]> {
-  const all = await (await db()).getAllFromIndex('songs', 'by-created');
-  return all.reverse();
+  const all = await (await db()).getAll('songs');
+  return all.sort((a, b) => a.order - b.order);
+}
+
+/** Rango de posiciones ocupado, para insertar al principio o al final. */
+export function orderBounds(songs: readonly Song[]): { first: number; last: number } {
+  if (songs.length === 0) return { first: 0, last: 0 };
+  let first = Infinity;
+  let last = -Infinity;
+  for (const song of songs) {
+    if (song.order < first) first = song.order;
+    if (song.order > last) last = song.order;
+  }
+  return { first, last };
 }
 
 export async function getSong(id: string): Promise<Song | undefined> {

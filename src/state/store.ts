@@ -6,29 +6,70 @@
 
 import { create } from 'zustand';
 import type { DetectionResult } from '../dsp/engine';
-import { deleteSong, listSongs, newId, putSong, type Song } from '../data/db';
+import {
+  ORDER_GAP,
+  deleteSong,
+  listSongs,
+  newId,
+  orderBounds,
+  putSong,
+  readSetting,
+  writeSetting,
+  type Song
+} from '../data/db';
 import { DEFAULT_PACK_ID } from '../metronome/packs';
 import { optionsFor } from '../metronome/grooves';
 
 export type Screen = 'listen' | 'library' | 'metronome';
 
+/**
+ * `manual` es el orden que el usuario construye con las flechas. Los
+ * demas modos son vistas: reordenar a mano dentro de una lista ordenada
+ * por titulo no significa nada, asi que las flechas solo actuan en
+ * `manual`.
+ */
+export type SortMode = 'manual' | 'title' | 'bpm' | 'recent';
+
+export const SORT_LABELS: Record<SortMode, string> = {
+  manual: 'Mi orden',
+  title: 'Título',
+  bpm: 'BPM',
+  recent: 'Reciente'
+};
+
+/** Compara ignorando mayusculas y acentos: "Bailé" encuentra "baile". */
+export function normalize(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 interface AppState {
   screen: Screen;
   songs: Song[];
   activeSongId: string | null;
-  /** Ultimo resultado de deteccion aun sin guardar ni descartar. */
   pending: DetectionResult | null;
   loaded: boolean;
+  query: string;
+  sortMode: SortMode;
 
   go: (screen: Screen) => void;
   loadLibrary: () => Promise<void>;
   setPending: (result: DetectionResult | null) => void;
+  setQuery: (query: string) => void;
+  setSortMode: (mode: SortMode) => void;
+  visibleSongs: () => Song[];
   saveDetection: (title: string, result: DetectionResult) => Promise<string>;
-  addManual: (input: Omit<Song, 'id' | 'createdAt' | 'updatedAt' | 'source'>) => Promise<string>;
+  addManual: (
+    input: Omit<Song, 'id' | 'createdAt' | 'updatedAt' | 'source' | 'order'>
+  ) => Promise<string>;
   updateSong: (song: Song) => Promise<void>;
   removeSong: (id: string) => Promise<void>;
+  moveSong: (id: string, direction: -1 | 1) => Promise<void>;
+  moveToEdge: (id: string, edge: 'top' | 'bottom') => Promise<void>;
   openSong: (id: string) => void;
-  activeSong: () => Song | null;
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -37,14 +78,50 @@ export const useApp = create<AppState>((set, get) => ({
   activeSongId: null,
   pending: null,
   loaded: false,
+  query: '',
+  sortMode: 'manual',
 
   go: (screen) => set({ screen }),
 
   loadLibrary: async () => {
-    set({ songs: await listSongs(), loaded: true });
+    const [songs, sortMode] = await Promise.all([
+      listSongs(),
+      readSetting<SortMode>('sortMode', 'manual')
+    ]);
+    set({ songs, sortMode, loaded: true });
   },
 
   setPending: (pending) => set({ pending }),
+
+  setQuery: (query) => set({ query }),
+
+  setSortMode: (sortMode) => {
+    set({ sortMode });
+    void writeSetting('sortMode', sortMode);
+  },
+
+  visibleSongs: () => {
+    const { songs, query, sortMode } = get();
+    const needle = normalize(query);
+    const filtered = needle ? songs.filter((s) => normalize(s.title).includes(needle)) : songs;
+
+    const sorted = [...filtered];
+    switch (sortMode) {
+      case 'title':
+        sorted.sort((a, b) => normalize(a.title).localeCompare(normalize(b.title), 'es'));
+        break;
+      case 'bpm':
+        sorted.sort((a, b) => a.bpm - b.bpm);
+        break;
+      case 'recent':
+        sorted.sort((a, b) => b.createdAt - a.createdAt);
+        break;
+      case 'manual':
+        sorted.sort((a, b) => a.order - b.order);
+        break;
+    }
+    return sorted;
+  },
 
   saveDetection: async (title, result) => {
     const grooves = optionsFor(result.meter);
@@ -57,9 +134,9 @@ export const useApp = create<AppState>((set, get) => ({
       subdivision: result.subdivision,
       confidence: result.confidence,
       packId: DEFAULT_PACK_ID,
-      // El primer groove de kit si existe; si no, el click plano.
       grooveId: (grooves.find((g) => !g.id.startsWith('click-')) ?? grooves[0]).id,
       source: 'detected',
+      order: orderBounds(get().songs).first - ORDER_GAP,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -73,6 +150,7 @@ export const useApp = create<AppState>((set, get) => ({
       ...input,
       id: newId(),
       source: 'manual',
+      order: orderBounds(get().songs).first - ORDER_GAP,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -83,7 +161,9 @@ export const useApp = create<AppState>((set, get) => ({
 
   updateSong: async (song) => {
     await putSong(song);
-    set({ songs: get().songs.map((s) => (s.id === song.id ? { ...song, updatedAt: Date.now() } : s)) });
+    set({
+      songs: get().songs.map((s) => (s.id === song.id ? { ...song, updatedAt: Date.now() } : s))
+    });
   },
 
   removeSong: async (id) => {
@@ -94,7 +174,41 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
 
-  openSong: (id) => set({ activeSongId: id, screen: 'metronome' }),
+  /**
+   * Intercambia la posicion con el vecino. Se opera sobre la lista
+   * VISIBLE, no sobre la completa: si hay una busqueda activa, "arriba"
+   * significa el vecino que el usuario esta viendo.
+   */
+  moveSong: async (id, direction) => {
+    const visible = get().visibleSongs();
+    const index = visible.findIndex((s) => s.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= visible.length) return;
 
-  activeSong: () => get().songs.find((s) => s.id === get().activeSongId) ?? null
+    const a = visible[index];
+    const b = visible[target];
+    const swapped = get().songs.map((s) => {
+      if (s.id === a.id) return { ...s, order: b.order };
+      if (s.id === b.id) return { ...s, order: a.order };
+      return s;
+    });
+    set({ songs: swapped });
+    await Promise.all([
+      putSong({ ...a, order: b.order }),
+      putSong({ ...b, order: a.order })
+    ]);
+  },
+
+  moveToEdge: async (id, edge) => {
+    const songs = get().songs;
+    const song = songs.find((s) => s.id === id);
+    if (!song) return;
+    const { first, last } = orderBounds(songs);
+    const order = edge === 'top' ? first - ORDER_GAP : last + ORDER_GAP;
+    const moved = { ...song, order };
+    set({ songs: songs.map((s) => (s.id === id ? moved : s)) });
+    await putSong(moved);
+  },
+
+  openSong: (id) => set({ activeSongId: id, screen: 'metronome' })
 }));
