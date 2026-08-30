@@ -1,0 +1,57 @@
+import { useEffect } from 'react';
+import { useApp } from '../state/store';
+import { ListenScreen } from './ListenScreen';
+import { LibraryScreen } from './LibraryScreen';
+import { MetronomeScreen } from './MetronomeScreen';
+
+export default function App() {
+  const screen = useApp((s) => s.screen);
+  const go = useApp((s) => s.go);
+  const loadLibrary = useApp((s) => s.loadLibrary);
+  const activeSong = useApp((s) => s.songs.find((song) => song.id === s.activeSongId) ?? null);
+
+  useEffect(() => {
+    void loadLibrary();
+  }, [loadLibrary]);
+
+  // El metronomo va a pantalla completa: cuando estas tocando encima de
+  // algo no quieres una barra de navegacion pidiendo un toque de mas.
+  if (screen === 'metronome' && activeSong) {
+    return (
+      <main className="safe-top mx-auto min-h-full w-full max-w-lg">
+        <MetronomeScreen key={activeSong.id} song={activeSong} />
+      </main>
+    );
+  }
+
+  return (
+    <div className="flex min-h-full flex-col">
+      <main className="safe-top mx-auto w-full max-w-lg flex-1">
+        {screen === 'listen' ? <ListenScreen /> : <LibraryScreen />}
+      </main>
+
+      <nav className="safe-bottom sticky bottom-0 border-t border-line bg-ground/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-lg">
+          <TabButton active={screen === 'listen'} onClick={() => go('listen')} label="Escuchar" />
+          <TabButton active={screen === 'library'} onClick={() => go('library')} label="Biblioteca" />
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+function TabButton(props: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className={
+        'flex-1 py-3.5 text-sm tracking-[0.14em] uppercase transition-colors ' +
+        (props.active ? 'text-signal' : 'text-muted')
+      }
+      aria-current={props.active ? 'page' : undefined}
+    >
+      {props.label}
+    </button>
+  );
+}

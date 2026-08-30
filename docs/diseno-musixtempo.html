@@ -1,0 +1,706 @@
+<title>MusixTempo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  :root {
+    --ground:     #EDEFF2;
+    --surface:    #FFFFFF;
+    --surface-2:  #E4E8ED;
+    --ink:        #111820;
+    --muted:      #56626F;
+    --line:       #D2D9E1;
+    --line-soft:  #E0E5EB;
+    --signal:     #B87409;
+    --signal-hi:  #E39B1F;
+    --signal-dim: rgba(227, 155, 31, 0.16);
+    --shadow:     0 1px 2px rgba(17, 24, 32, .05), 0 8px 24px -12px rgba(17, 24, 32, .16);
+
+    --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --f-body:    "Source Serif 4", Georgia, "Times New Roman", serif;
+    --f-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:     #0E1216;
+      --surface:    #151A20;
+      --surface-2:  #1C232B;
+      --ink:        #E6EAEF;
+      --muted:      #8D98A6;
+      --line:       #262F38;
+      --line-soft:  #1E262E;
+      --signal:     #F5B33F;
+      --signal-hi:  #FFC96B;
+      --signal-dim: rgba(245, 179, 63, 0.14);
+      --shadow:     0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px -14px rgba(0, 0, 0, .7);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:     #0E1216;
+    --surface:    #151A20;
+    --surface-2:  #1C232B;
+    --ink:        #E6EAEF;
+    --muted:      #8D98A6;
+    --line:       #262F38;
+    --line-soft:  #1E262E;
+    --signal:     #F5B33F;
+    --signal-hi:  #FFC96B;
+    --signal-dim: rgba(245, 179, 63, 0.14);
+    --shadow:     0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px -14px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 51rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 6vw, 4.5rem) clamp(1.1rem, 4vw, 2rem) 6rem;
+  }
+
+  /* ---------- type ---------- */
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    font-weight: 500;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  h1 {
+    font-family: var(--f-display);
+    font-variation-settings: "wdth" 118, "wght" 780;
+    font-size: clamp(2.9rem, 11vw, 5.25rem);
+    line-height: .92;
+    letter-spacing: -.022em;
+    margin: .55rem 0 0;
+    text-wrap: balance;
+  }
+
+  h2 {
+    font-family: var(--f-display);
+    font-variation-settings: "wdth" 112, "wght" 700;
+    font-size: clamp(1.45rem, 4vw, 1.95rem);
+    line-height: 1.12;
+    letter-spacing: -.014em;
+    margin: 0 0 .2rem;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: var(--f-display);
+    font-variation-settings: "wdth" 106, "wght" 640;
+    font-size: 1.06rem;
+    line-height: 1.3;
+    letter-spacing: -.005em;
+    margin: 0 0 .35rem;
+  }
+
+  p { margin: 0 0 1rem; }
+  .lede { font-size: 1.16rem; color: var(--muted); max-width: 40ch; }
+  section > p, section > ul { max-width: 66ch; }
+  strong { font-weight: 600; }
+  em { color: var(--muted); }
+
+  code, .mono { font-family: var(--f-mono); font-size: .86em; }
+  p code, li code, td code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: .1em .34em;
+  }
+
+  a { color: var(--signal); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  /* ---------- pulse rule: a metric grid, not a hairline ---------- */
+  .rule {
+    height: 7px;
+    margin: 3.4rem 0;
+    background-image: radial-gradient(circle at center, var(--line) 1.5px, transparent 1.6px);
+    background-size: 14px 7px;
+    background-repeat: repeat-x;
+    background-position: left center;
+  }
+  .rule.accent {
+    background-image:
+      radial-gradient(circle at 7px center, var(--signal) 2px, transparent 2.1px),
+      radial-gradient(circle at center, var(--line) 1.5px, transparent 1.6px);
+    background-size: 56px 7px, 14px 7px;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead { margin-bottom: 2.6rem; }
+  .stamp {
+    display: flex; flex-wrap: wrap; gap: .45rem;
+    margin: 1.3rem 0 0;
+  }
+  .chip {
+    font-family: var(--f-mono);
+    font-size: .68rem; font-weight: 500;
+    letter-spacing: .1em; text-transform: uppercase;
+    padding: .3rem .6rem;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    color: var(--muted);
+  }
+  .chip.on {
+    border-color: var(--signal);
+    color: var(--signal);
+    background: var(--signal-dim);
+  }
+
+  /* ---------- live pulse demo ---------- */
+  .demo {
+    margin-top: 2.2rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    box-shadow: var(--shadow);
+    padding: 1.4rem clamp(1rem, 3vw, 1.7rem) 1.25rem;
+  }
+  .demo-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 1rem; margin-bottom: 1.25rem;
+  }
+  .demo-title {
+    font-family: var(--f-mono); font-size: .7rem; font-weight: 500;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+  }
+  .demo-note { font-size: .82rem; color: var(--muted); font-style: italic; }
+
+  .lane { display: grid; grid-template-columns: 5.5rem 1fr; gap: 1rem; align-items: center; }
+  .lane + .lane { margin-top: 1.1rem; }
+  .lane-label { font-family: var(--f-mono); font-size: .78rem; color: var(--ink); }
+  .lane-label .sub { display: block; font-size: .68rem; color: var(--muted); }
+  .steps { display: flex; align-items: center; gap: .38rem; }
+  .step {
+    flex: 1 1 0;
+    height: 30px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: var(--surface-2);
+    transition: background-color .09s linear, border-color .09s linear, box-shadow .09s linear;
+  }
+  .step.accent { border-color: var(--muted); }
+  .step.lit {
+    background: var(--signal);
+    border-color: var(--signal);
+    box-shadow: 0 0 0 3px var(--signal-dim);
+  }
+  .gap { flex: 0 0 .7rem; }
+
+  /* ---------- generic blocks ---------- */
+  section { margin-bottom: 0; }
+  .grid-2 {
+    display: grid; gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    margin: 1.6rem 0;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1.1rem 1.15rem;
+  }
+  .card .eyebrow { margin-bottom: .5rem; }
+  .card p { font-size: .95rem; margin-bottom: 0; color: var(--muted); }
+  .card p + p { margin-top: .7rem; }
+
+  .scroll { overflow-x: auto; margin: 1.5rem 0; border-radius: 4px; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 30rem;
+    font-size: .9rem;
+    background: var(--surface);
+  }
+  th, td {
+    text-align: left;
+    padding: .62rem .8rem;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  thead th {
+    font-family: var(--f-mono);
+    font-size: .68rem; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.hot td { background: var(--signal-dim); }
+  tr.hot td:first-child { box-shadow: inset 3px 0 0 var(--signal); }
+
+  pre {
+    font-family: var(--f-mono);
+    font-size: .8rem;
+    line-height: 1.62;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    margin: 1.4rem 0;
+  }
+  pre .c { color: var(--muted); }
+  pre .k { color: var(--signal); }
+
+  ul { padding-left: 1.15rem; margin: 0 0 1rem; }
+  li { margin-bottom: .45rem; }
+  li::marker { color: var(--signal); }
+
+  /* ---------- staged timeline (a real sequence) ---------- */
+  .stages { display: grid; gap: 0; margin: 1.6rem 0; }
+  .stage {
+    display: grid;
+    grid-template-columns: 4.2rem 1fr;
+    gap: 1.1rem;
+    padding: .95rem 0;
+    border-top: 1px solid var(--line-soft);
+    align-items: start;
+  }
+  .stage:last-child { border-bottom: 1px solid var(--line-soft); }
+  .stage-t {
+    font-family: var(--f-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--signal);
+    padding-top: .06rem;
+  }
+  .stage-name {
+    font-family: var(--f-mono); font-size: .72rem; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--ink);
+  }
+  .stage-body { font-size: .93rem; color: var(--muted); margin-top: .18rem; }
+
+  /* ---------- groove grids ---------- */
+  .grooves { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); margin: 1.6rem 0; }
+  .groove {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1rem 1.05rem 1.1rem;
+  }
+  .groove h3 { margin-bottom: .1rem; }
+  .groove .meta { font-family: var(--f-mono); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: .85rem; }
+  .grow { display: grid; grid-template-columns: 2.6rem 1fr; gap: .6rem; align-items: center; }
+  .grow + .grow { margin-top: .34rem; }
+  .grow-label { font-family: var(--f-mono); font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .cells { display: flex; gap: .22rem; }
+  .cell { flex: 1 1 0; height: 17px; border-radius: 2px; background: var(--surface-2); border: 1px solid var(--line-soft); }
+  .cell.on { background: var(--signal); border-color: var(--signal); }
+  .cell.grp { border-left-color: var(--muted); }
+
+  /* ---------- risks ---------- */
+  .risk { border-top: 1px solid var(--line-soft); padding: 1rem 0; }
+  .risk:last-of-type { border-bottom: 1px solid var(--line-soft); }
+  .risk h3 { margin-bottom: .2rem; }
+  .risk p { font-size: .93rem; color: var(--muted); margin: 0; max-width: 66ch; }
+
+  .phases { display: grid; gap: .8rem; margin: 1.6rem 0 0; }
+  .phase {
+    display: grid; grid-template-columns: 5.4rem 1fr; gap: 1rem;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 4px; padding: .9rem 1.05rem;
+  }
+  .phase-tag { font-family: var(--f-mono); font-size: .7rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding-top: .18rem; }
+  .phase.now { border-color: var(--signal); }
+  .phase.now .phase-tag { color: var(--signal); }
+  .phase p { font-size: .93rem; margin: .2rem 0 0; color: var(--muted); }
+
+  footer {
+    margin-top: 3.4rem;
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    letter-spacing: .06em;
+    color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: .4rem 1.4rem;
+  }
+
+  @media (max-width: 34rem) {
+    .lane { grid-template-columns: 1fr; gap: .5rem; }
+    .stage { grid-template-columns: 3.4rem 1fr; gap: .8rem; }
+    .phase { grid-template-columns: 1fr; gap: .3rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .step { transition: none; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Especificación de diseño · v1 · 30 ago 2026</p>
+    <h1>MusixTempo</h1>
+    <p class="lede">Escucha lo que suena y dice a qué velocidad va y en qué compás está. El nombre de la canción es secundario.</p>
+    <div class="stamp">
+      <span class="chip on">Aprobado</span>
+      <span class="chip">PWA instalable</span>
+      <span class="chip">Micrófono</span>
+      <span class="chip">Offline</span>
+      <span class="chip">Fase 1 de 3</span>
+    </div>
+
+    <div class="demo">
+      <div class="demo-head">
+        <span class="demo-title">El problema, en dos compases</span>
+        <span class="demo-note">Misma duración de compás. Agrupación distinta.</span>
+      </div>
+
+      <div class="lane">
+        <div class="lane-label">120 · 4/4<span class="sub">binario</span></div>
+        <div class="steps" id="lane44"></div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-label">60 · 6/8<span class="sub">= 180 corcheas</span></div>
+        <div class="steps" id="lane68"></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="rule accent"></div>
+
+  <section>
+    <h2>Qué tiene que hacer</h2>
+    <p>Determinar <strong>tempo y métrica</strong> con la mayor precisión y rapidez posibles, a partir del micrófono. Guardar el resultado en una biblioteca local y reproducirlo con un metrónomo de sonidos sintetizados y grooves de batería.</p>
+    <p>Tres requisitos marcan el diseño entero:</p>
+    <ul>
+      <li><strong>El tempo manda.</strong> El título de la canción llega en Fase 2 y nunca compite por recursos con la detección.</li>
+      <li><strong>Cualquier patrón continuo, no solo música comercial.</strong> Tarareo, percusión de mano y patrones a capela son casos de primera clase — y son, precisamente, lo que hunde a los modelos entrenados con pop.</li>
+      <li><strong>4/4 y 6/8 con atención especial.</strong> 3/4, 2/4, 12/8, 5/4 y 7/8 también, pero esas dos son el listón.</li>
+    </ul>
+  </section>
+
+  <div class="rule"></div>
+
+  <section>
+    <h2>Decisiones y por qué</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Decisión</th><th>Elección</th><th>Razón</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Plataforma</td><td>PWA instalable</td>
+            <td>Sin publicación, sin Mac, sin revisión de tienda.</td>
+          </tr>
+          <tr class="hot">
+            <td>Captura</td><td>Micrófono</td>
+            <td>iOS no permite a terceros capturar el audio del sistema, y Android bloquea la captura de apps de música. Shazam en móvil tampoco lo hace: usa el micrófono.</td>
+          </tr>
+          <tr>
+            <td>BPM en compás compuesto</td><td>Pulso sentido como titular</td>
+            <td><code>60 · 6/8</code> grande, <code>= 180 corcheas</code> debajo. Mata la ambigüedad de raíz.</td>
+          </tr>
+          <tr>
+            <td>Motor</td><td>DSP clásico + árbitro</td>
+            <td>El clásico cubre tarareo y funciona sin cobertura; el árbitro sube el techo en música comercial.</td>
+          </tr>
+          <tr>
+            <td>Licencias de modelo</td><td>Diseñar en seguro</td>
+            <td>Solo MIT/Apache/BSD o modelo propio. No cierra la puerta a un uso comercial futuro.</td>
+          </tr>
+          <tr>
+            <td>Sonidos</td><td>Sintetizados + packs</td>
+            <td>Cero assets, cero riesgo legal, 15 familias paramétricas. Samples propios enchufables después.</td>
+          </tr>
+          <tr>
+            <td>Modos</td><td>Mutuamente excluyentes</td>
+            <td>Detectar solo escucha; metrónomo solo suena. Elimina la realimentación del propio click.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="rule"></div>
+
+  <section>
+    <h2>Tres pantallas</h2>
+    <div class="grid-2">
+      <div class="card">
+        <p class="eyebrow">① Escuchar</p>
+        <p>Un botón grande. El micrófono arranca y aparece un indicador de pulso vivo. El número se endurece conforme el motor gana certeza — <strong>su estado visual <em>es</em> la confianza</strong>.</p>
+      </div>
+      <div class="card">
+        <p class="eyebrow">② Resultado</p>
+        <p>BPM grande y métrica. Corrección de octava a un toque (<code>×2</code> / <code>÷2</code>) por si el motor se equivoca de nivel métrico. Guardar o descartar.</p>
+      </div>
+      <div class="card">
+        <p class="eyebrow">③ Biblioteca</p>
+        <p>Las canciones guardadas. Al tocar una se abre el metrónomo con su tempo y su compás ya cargados, con selector de sonido y groove. Alta manual con tap tempo.</p>
+      </div>
+    </div>
+
+    <p>Todo lo demás en la aplicación consume exclusivamente este objeto:</p>
+<pre><span class="c">// lo único que el motor emite hacia fuera</span>
+<span class="k">interface</span> DetectionResult {
+  bpm: number;              <span class="c">// pulso sentido, decimal</span>
+  bpmAlt: number;           <span class="c">// la subdivisión</span>
+  meter: { beatsPerBar: number; beatUnit: number };
+  subdivision: <span class="k">'binary'</span> | <span class="k">'ternary'</span>;
+  confidence: number;       <span class="c">// 0..1</span>
+  nextBeatAt: number;       <span class="c">// reloj de AudioContext</span>
+  nextDownbeatAt: number;
+  stage: <span class="k">'provisional'</span> | <span class="k">'stable'</span> | <span class="k">'refined'</span>;
+  elapsedMs: number;
+  clipping: boolean;
+}</pre>
+  </section>
+
+  <div class="rule accent"></div>
+
+  <section>
+    <h2>El motor</h2>
+    <p>Un <code>AudioWorklet</code> solo copia bloques a un búfer circular; <strong>no analiza nada ahí</strong>. Todo el DSP vive en un <code>Worker</code>, para que ni el render a 60 fps ni una pasada pesada puedan provocar cortes de audio.</p>
+    <p>La captura pide <code>echoCancellation</code>, <code>noiseSuppression</code> y <code>autoGainControl</code> <strong>desactivados</strong>. No es un detalle de ajuste: el procesado de voz que iOS y Android aplican por defecto está diseñado para aplastar todo lo que no sea habla, y destruiría el análisis rítmico.</p>
+
+    <h3>Tres detectores de onset, no uno</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Detector</th><th>Qué cubre</th></tr></thead>
+        <tbody>
+          <tr><td>Flujo espectral por bandas</td><td>Ataques percusivos — bombo, caja, hi-hats</td></tr>
+          <tr><td>Dominio complejo (fase + magnitud)</td><td>Ataques suaves — cuerdas, sintetizadores, pads</td></tr>
+          <tr class="hot"><td>Cambio de f0 / tono</td><td><strong>Tarareo</strong> — donde no hay ataque, solo nota nueva</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>De dónde sale la cifra</h3>
+    <p>Ventana deslizante de 8 s, refresco cada 100 ms. Autocorrelación por banco de peines da el tempograma; el plegado por octavas separa <em>qué ratio</em> de <em>qué octava</em>; un prior perceptual centrado en ~120 BPM rompe los empates. La interpolación del pico llega a ±0.3 BPM — pero <strong>la cifra final no sale de ahí</strong>: sale de ajustar una recta por mínimos cuadrados a los tiempos de beat de toda la ventana. Eso baja el error a ±0.1 BPM.</p>
+
+    <h3>Métrica = agrupación × subdivisión</h3>
+    <p>Dos preguntas independientes. ¿Cuántos pulsos hay por compás? ¿Y cada pulso se parte en dos o en tres? El cruce de ambas respuestas <em>es</em> la métrica.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Agrupación</th><th>Subdivisión</th><th>Métrica</th></tr></thead>
+        <tbody>
+          <tr class="hot"><td class="num">2</td><td>ternario</td><td class="num"><strong>6/8</strong></td></tr>
+          <tr class="hot"><td class="num">4</td><td>binario</td><td class="num"><strong>4/4</strong></td></tr>
+          <tr><td class="num">3</td><td>binario</td><td class="num">3/4</td></tr>
+          <tr><td class="num">4</td><td>ternario</td><td class="num">12/8</td></tr>
+          <tr><td class="num">2</td><td>binario</td><td class="num">2/4</td></tr>
+          <tr><td class="num">5 / 7</td><td>binario</td><td class="num">5/4 · 7/8</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>El caso duro es 6/8 contra 4/4 con swing:</strong> los dos son ternarios, así que la subdivisión no los distingue. Los separa la agrupación — 2 frente a 4 — y el patrón del bombo. Por eso el análisis de compás no es un extra opcional: es lo que hace que 6/8 funcione.</p>
+
+    <h3>Escalonado</h3>
+    <div class="stages">
+      <div class="stage">
+        <div class="stage-t">~2 s</div>
+        <div>
+          <div class="stage-name">Provisional</div>
+          <div class="stage-body">Autocorrelación sobre ventana corta. El número sale en gris, etiquetado. No promete lo que no sabe.</div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="stage-t">~6 s</div>
+        <div>
+          <div class="stage-name">Estable</div>
+          <div class="stage-body">Tempograma completo más rastreo de fase. El número se endurece.</div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="stage-t">~10 s</div>
+        <div>
+          <div class="stage-name">Refinado</div>
+          <div class="stage-body">Métrica confirmada y árbitro incorporado. Mientras el usuario siga escuchando, sigue afinando.</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>El árbitro</h3>
+    <p>Corre de fondo cada ~4 s sin bloquear nada, detrás de una interfaz de dos métodos. Si discrepa fuerte del clásico, <strong>baja la confianza en lugar de inventar un ganador</strong>. Entra en v1 como árbitro heurístico; el slot neuronal queda listo, pendiente del spike de licencias.</p>
+  </section>
+
+  <div class="rule"></div>
+
+  <section>
+    <h2>Metrónomo</h2>
+    <p><code>setInterval</code> derrapa decenas de milisegundos y hace inservible un metrónomo. El patrón correcto son dos relojes: un temporizador grueso cada 25 ms que mira <strong>200 ms hacia delante</strong>, y cada golpe programado en tiempos exactos del reloj de audio. La precisión resultante es de muestra. El indicador visual se dibuja aparte, calculando <em>dónde debería estar el pulso ahora</em> — nunca pintando cuando suena.</p>
+
+    <h3>Quince familias, cero bytes</h3>
+    <p>Cada voz es una función pura que arma su grafo de audio y se autodestruye. Un kick es un seno con barrido de 120 a 45 Hz más un click de ataque; un hi-hat, seis cuadradas en ratios metálicos filtradas en paso alto. Todas con tono, decaimiento y brillo paramétricos — de ahí que no sean quince sonidos, sino quince familias.</p>
+
+    <h3>Grooves declarativos</h3>
+    <p>Un groove es una rejilla de datos. Añadir uno nuevo es añadir un objeto a un array, no escribir código.</p>
+
+    <div class="grooves">
+      <div class="groove">
+        <h3>Rock básico</h3>
+        <div class="meta">4/4 · binario · 8 pasos</div>
+        <div class="grow"><span class="grow-label">Hat</span><div class="cells" data-p="11111111" data-g="4"></div></div>
+        <div class="grow"><span class="grow-label">Snare</span><div class="cells" data-p="00100010" data-g="4"></div></div>
+        <div class="grow"><span class="grow-label">Kick</span><div class="cells" data-p="10001000" data-g="4"></div></div>
+      </div>
+      <div class="groove">
+        <h3>Balada 6/8</h3>
+        <div class="meta">6/8 · ternario · 6 pasos</div>
+        <div class="grow"><span class="grow-label">Hat</span><div class="cells" data-p="111111" data-g="3"></div></div>
+        <div class="grow"><span class="grow-label">Snare</span><div class="cells" data-p="000100" data-g="3"></div></div>
+        <div class="grow"><span class="grow-label">Kick</span><div class="cells" data-p="100000" data-g="3"></div></div>
+      </div>
+    </div>
+
+    <p>Un <em>pack</em> mapea roles — <code>accent</code>, <code>beat</code>, <code>kick</code>, <code>snare</code>, <code>hat</code> — a voces sintéticas <strong>o</strong> a URLs de samples, y el scheduler no distingue cuál es cuál. El día que quieras meter tus propios WAV, sueltas un pack con URLs y no se toca una línea del motor.</p>
+  </section>
+
+  <div class="rule"></div>
+
+  <section>
+    <h2>Cómo medimos «el más preciso»</h2>
+    <p>Esta es la parte que casi todo el mundo se salta, y por eso sus apps no mejoran nunca. <code>src/dsp/</code> es <strong>código puro</strong>: sin DOM, sin Web Audio, sin async. Entra un <code>Float32Array</code>, sale un objeto. Se prueba en Node, sin navegador, sin mocks y sin flakiness.</p>
+    <ul>
+      <li><strong>Corpus sintético generado por el propio motor de grooves.</strong> Cientos de piezas con BPM, métrica y subdivisión conocidos <em>por construcción</em> — no anotados a mano, exactos. Con humanización de timing, deriva de tempo, kits distintos, ruido de sala y saturación.</li>
+      <li><strong>Métricas estándar del campo:</strong> <em>Accuracy 1</em> (±4 % del BPM real), <em>Accuracy 2</em> (tolera errores de octava), F-measure de beats, y la métrica como matriz de confusión con la celda 6/8 ↔ 4/4 vigilada explícitamente.</li>
+      <li><strong>Umbral de regresión en CI.</strong> Un cambio que baje Accuracy 1 o empeore la celda 6/8 rompe la build. Sin esto, «mejorar la precisión» es una opinión.</li>
+    </ul>
+  </section>
+
+  <div class="rule"></div>
+
+  <section>
+    <h2>Riesgos</h2>
+
+    <div class="risk">
+      <h3>El árbitro neuronal</h3>
+      <p>No hay garantía de que exista un modelo con licencia permisiva que merezca la pena. Escalera de mitigación: spike acotado → entrenar el nuestro con el corpus sintético → el clásico va solo. <strong>En ningún escenario nos quedamos sin producto</strong>, solo con menos techo.</p>
+    </div>
+
+    <div class="risk">
+      <h3>Micrófonos de móvil con AGC apagado</h3>
+      <p>Desactivar el control automático de ganancia es obligatorio para el análisis, pero significa que un micrófono barato con música fuerte satura. Mitigación: detección de recorte con aviso en pantalla.</p>
+    </div>
+
+    <div class="risk">
+      <h3>6/8 con poca percusión</h3>
+      <p>Una balada de piano en 6/8 es el caso más difícil que existe en este problema. Es exactamente donde apuntan el detector de f0 y el análisis de agrupación, y donde el corpus tiene que apretar.</p>
+    </div>
+
+    <div class="risk">
+      <h3>El interruptor de silencio de iOS</h3>
+      <p>Safari silencia Web Audio con el interruptor físico del iPhone. Se implementa el truco conocido del <code>&lt;audio&gt;</code> mudo en bucle para forzar la categoría de sesión; si Apple lo ha cerrado, el usuario tendrá que subir el switch. No hay alternativa desde una web, y prometer lo contrario sería mentir.</p>
+    </div>
+  </section>
+
+  <div class="rule"></div>
+
+  <section>
+    <h2>Qué entra y qué no</h2>
+    <div class="phases">
+      <div class="phase now">
+        <div class="phase-tag">Fase 1</div>
+        <div>
+          <strong>Detectar → guardar → tocar.</strong>
+          <p>Micrófono, motor completo, biblioteca local, metrónomo con quince familias de sonido y grooves para 4/4, 6/8, 3/4 y 2/4. Alta manual de canciones. Es lo que se construye ahora.</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-tag">Fase 2</div>
+        <div>
+          <strong>Identificación de canción.</strong>
+          <p>Fingerprinting en la nube con enlaces a Spotify, Apple Music y YouTube Music — y «No encontrada» cuando no exista, sin que eso afecte nunca a la detección de tempo.</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-tag">Fase 3</div>
+        <div>
+          <strong>Metrónomo avanzado.</strong>
+          <p>Subdivisiones, polirritmia, setlists, entrenador de tempo. Y el click sonando encima de música en vivo, con auriculares.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>MusixTempo</span>
+    <span>Especificación v1</span>
+    <span>30 · 08 · 2026</span>
+  </footer>
+</div>
+
+<script>
+  // ---- groove step grids ----
+  document.querySelectorAll('.cells').forEach(function (row) {
+    var pattern = row.dataset.p || '';
+    var group = parseInt(row.dataset.g, 10) || 4;
+    for (var i = 0; i < pattern.length; i++) {
+      var cell = document.createElement('span');
+      cell.className = 'cell' + (pattern[i] === '1' ? ' on' : '') + (i % group === 0 ? ' grp' : '');
+      row.appendChild(cell);
+    }
+  });
+
+  // ---- live pulse demo: same bar length, different grouping ----
+  var BAR_MS = 2000;                 // one bar, identical in both lanes
+  var lanes = [
+    { el: document.getElementById('lane44'), n: 4, accents: [0], gapAfter: [] },
+    { el: document.getElementById('lane68'), n: 6, accents: [0, 3], gapAfter: [2] }
+  ];
+
+  lanes.forEach(function (lane) {
+    lane.steps = [];
+    for (var i = 0; i < lane.n; i++) {
+      var s = document.createElement('span');
+      s.className = 'step' + (lane.accents.indexOf(i) > -1 ? ' accent' : '');
+      lane.el.appendChild(s);
+      lane.steps.push(s);
+      if (lane.gapAfter.indexOf(i) > -1) {
+        var g = document.createElement('span');
+        g.className = 'gap';
+        lane.el.appendChild(g);
+      }
+    }
+    lane.last = -1;
+  });
+
+  function light(lane, index) {
+    if (lane.last === index) return;
+    if (lane.last > -1) lane.steps[lane.last].classList.remove('lit');
+    lane.steps[index].classList.add('lit');
+    lane.last = index;
+  }
+
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  if (reduced.matches) {
+    lanes.forEach(function (lane) { light(lane, 0); });
+  } else {
+    var t0 = performance.now();
+    var run = function (now) {
+      var pos = ((now - t0) % BAR_MS) / BAR_MS;
+      lanes.forEach(function (lane) {
+        light(lane, Math.min(lane.n - 1, Math.floor(pos * lane.n)));
+      });
+      requestAnimationFrame(run);
+    };
+    requestAnimationFrame(run);
+  }
+</script>

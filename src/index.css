@@ -1,0 +1,82 @@
+@import 'tailwindcss';
+
+/*
+ * Sin webfonts a proposito. Un local de ensayo no siempre tiene
+ * cobertura, y una fuente que tarda en llegar deja el numero de BPM
+ * bailando justo cuando el usuario lo esta leyendo.
+ */
+@theme {
+  --color-ground: #0e1216;
+  --color-surface: #151a20;
+  --color-surface-2: #1c232b;
+  --color-line: #262f38;
+  --color-line-soft: #1e262e;
+  --color-ink: #e6eaef;
+  --color-muted: #8d98a6;
+  --color-signal: #f5b33f;
+  --color-signal-hi: #ffc96b;
+  --color-signal-dim: #3a2c12;
+  --color-danger: #e8654f;
+  --color-ok: #5fbf8f;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* Una app de metronomo no se arrastra ni hace zoom por accidente. */
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.safe-top {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+
+.safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
