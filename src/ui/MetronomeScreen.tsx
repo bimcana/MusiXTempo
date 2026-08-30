@@ -62,7 +62,13 @@ export function MetronomeScreen({ song }: { song: Song }) {
     }
   }, [bpm, grooveId, packId, song, updateSong]);
 
-  useEffect(() => persist, [persist]);
+  // La referencia se actualiza en cada render, pero el efecto se
+  // registra UNA vez. Con `[persist]` como dependencia, React ejecutaria
+  // la limpieza — es decir, guardaria — cada vez que cambia el tempo,
+  // que es exactamente lo que este codigo dice evitar.
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
+  useEffect(() => () => persistRef.current(), []);
 
   const readPulse = useCallback((): PulseState | null => {
     const position = metronome.positionNow();

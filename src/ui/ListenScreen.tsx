@@ -111,7 +111,7 @@ export function ListenScreen() {
   };
 
   return (
-    <div className="flex min-h-full flex-col items-center px-5 pt-4 pb-8">
+    <div className="flex flex-1 flex-col items-center px-5 pt-4 pb-8">
       {error && (
         <div className="mb-4 w-full max-w-md rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
           {error}

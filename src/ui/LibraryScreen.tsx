@@ -25,7 +25,7 @@ export function LibraryScreen() {
   if (adding) return <ManualForm onDone={() => setAdding(false)} />;
 
   return (
-    <div className="flex min-h-full flex-col gap-4 px-5 pt-2 pb-8">
+    <div className="flex flex-1 flex-col gap-4 px-5 pt-2 pb-8">
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Biblioteca</h1>
         <button

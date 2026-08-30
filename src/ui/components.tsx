@@ -164,9 +164,11 @@ export function PulseCanvas({ read, size = 200 }: { read: () => PulseState | nul
         ctx.fill();
       }
 
-      // Numero del pulso en curso
+      // Numero del pulso en curso. El peso NO se escala por dpr: solo el
+      // tamano. Un `font-weight: 1200` es invalido y el canvas cae en
+      // silencio a una fuente por defecto diminuta.
       ctx.fillStyle = '#e6eaef';
-      ctx.font = 600 * dpr + ' ' + 46 * dpr + 'px ' + getComputedStyle(canvas).fontFamily;
+      ctx.font = '600 ' + Math.round(size * 0.26 * dpr) + 'px ' + getComputedStyle(canvas).fontFamily;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(String(state.pulse + 1), cx, cy + 2 * dpr);

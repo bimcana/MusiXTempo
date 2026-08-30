@@ -26,7 +26,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <main className="safe-top mx-auto w-full max-w-lg flex-1">
+      <main className="safe-top mx-auto flex w-full max-w-lg flex-1 flex-col">
         {screen === 'listen' ? <ListenScreen /> : <LibraryScreen />}
       </main>
 
