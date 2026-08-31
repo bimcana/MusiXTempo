@@ -356,12 +356,14 @@
     <h1>MusixTempo</h1>
     <p class="lede">Escucha lo que suena y dice a qué velocidad va y en qué compás está. El nombre de la canción es secundario.</p>
     <div class="stamp">
-      <span class="chip on">Fase 1 construida</span>
+      <span class="chip on">Fase 1 + mundo real</span>
       <span class="chip">PWA instalable</span>
       <span class="chip">Micrófono</span>
+      <span class="chip on">Audio del sistema</span>
       <span class="chip">Offline</span>
-      <span class="chip on">96,7 % Accuracy 1</span>
-      <span class="chip on">6/8 al 100 %</span>
+      <span class="chip on">Fixture real: 0,1 % error</span>
+      <span class="chip on">Recuperación 2,3 s</span>
+      <span class="chip on">Tonalidad local</span>
     </div>
 
     <div class="demo">
@@ -627,6 +629,27 @@
       <li><strong>Sesgo de selección en la agrupación.</strong> Agrupar en 4 prueba el doble de fases que agrupar en 2, y en 7 prueba siete: con ruido, las agrupaciones grandes ganaban gratis. De ahí salían los 12/8 falsos y los 7/8 de la nada.</li>
     </ul>
     <p>El <code>4/4 → 2/4</code> sin armonía se deja como está, a propósito: con el bombo cayendo igual en los tiempos 1 y 3 y sin nada tonal, las dos lecturas <strong>suenan igual</strong>. Subir ese umbral solo le enseñaría al motor a adivinar.</p>
+  </section>
+
+  <div class="rule accent"></div>
+
+  <section>
+    <h2>El choque con el mundo real</h2>
+    <p>Una grabación de pantalla (30-08-2026) mostró la app en vivo deambulando — <span class="mono">57.9·2/4 → 110.8·3/4 → 125.3·6/8</span> — sobre una canción en 6/8 a ~200 ♩, con 13 pulsos acumulados tras 59 segundos. El audio extraído de esa misma grabación, pasado por el motor en frío: <strong>199,8 ♩ · 6/8, error 0,1 %, convergido en 4 s</strong>. El algoritmo estaba bien. Fallaba lo de alrededor, y la grabación quedó como fixture permanente del corpus.</p>
+    <div class="grid-2">
+      <div class="card">
+        <p class="eyebrow">Causa 1 · el cancelador de eco</p>
+        <p>Con la música sonando <strong>en el mismo equipo</strong>, el AEC del sistema la trata como eco a eliminar: el micrófono recibe un residuo destrozado. Respuesta: botón <strong>«Captura su audio»</strong> (getDisplayMedia, Chrome/Edge escritorio) — señal digital limpia, sin micrófono, sin sala, sin cancelador.</p>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Causa 2 · sin salida del enganche</p>
+        <p>El motor arrastraba una hipótesis muerta sin soltarla jamás. Ahora una racha de reinicios del acumulador o la confianza hundida <strong>liberan todo y re-anclan la ventana</strong>: el primer análisis tras soltar es 100 % audio nuevo. Medido con el fixture real: recuperación en <strong>2,3 s</strong> (antes, nunca en más de un minuto), blindada por test.</p>
+      </div>
+      <div class="card">
+        <p class="eyebrow">De la referencia, lo bueno</p>
+        <p>Del análisis de la app comercial equivalente: pestañas <strong>Tap</strong> (tap tempo de pantalla completa) y <strong>Buscar</strong> (BPM/tonalidad/compás por nombre, catálogo GetSongBPM), y <strong>tonalidad</strong> en tres notaciones — C#m · 12A · 5m — estimada localmente con Krumhansl-Kessler sobre el croma que ya se calculaba. El song ID se cruza con el catálogo: lo medido y lo catalogado, validándose mutuamente.</p>
+      </div>
+    </div>
   </section>
 
   <div class="rule"></div>
