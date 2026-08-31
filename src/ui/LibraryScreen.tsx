@@ -19,7 +19,7 @@ import { optionsFor } from '../metronome/grooves';
 import { DEFAULT_PACK_ID } from '../metronome/packs';
 import { SORT_LABELS, useApp, type SortMode } from '../state/store';
 import type { Song } from '../data/db';
-import { MeterPicker, TapTempo } from './components';
+import { MeterPicker, Sheet, TapTempo } from './components';
 import { useDragReorder } from './useDragReorder';
 
 const SORT_MODES: SortMode[] = ['manual', 'title', 'bpm', 'recent'];
@@ -347,14 +347,6 @@ function OptionsSheet({ song, onClose }: { song: Song; onClose: () => void }) {
   const sortMode = useApp((s) => s.sortMode);
   const setSortMode = useApp((s) => s.setSortMode);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const jump = async (edge: 'top' | 'bottom') => {
     // Mover al extremo solo se ve si la lista esta en orden manual, asi
     // que se cambia de modo en vez de dejar al usuario sin feedback.
@@ -364,45 +356,25 @@ function OptionsSheet({ song, onClose }: { song: Song; onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
-      <button
-        type="button"
-        aria-label="Cerrar"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/60"
-      />
-      <div className="safe-bottom relative mx-auto w-full max-w-lg rounded-t-2xl border-t border-line bg-surface p-4">
-        <p className="mb-3 truncate px-1 text-sm text-muted">{song.title}</p>
-        <div className="flex flex-col gap-1.5">
-          <SheetItem
-            title="Mover arriba"
-            hint="Encabeza la lista"
-            onClick={() => void jump('top')}
-          />
-          <SheetItem
-            title="Mover abajo"
-            hint="Al final de la lista"
-            onClick={() => void jump('bottom')}
-          />
-          <SheetItem
-            title="Borrar"
-            hint="No se puede deshacer"
-            danger
-            onClick={() => {
-              void removeSong(song.id);
-              onClose();
-            }}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-3 w-full rounded-lg border border-line bg-surface-2 py-3 text-sm tracking-[0.14em] text-muted uppercase"
-        >
-          Cancelar
-        </button>
+    <Sheet title={song.title} onClose={onClose}>
+      <div className="flex flex-col gap-1.5">
+        <SheetItem title="Mover arriba" hint="Encabeza la lista" onClick={() => void jump('top')} />
+        <SheetItem
+          title="Mover abajo"
+          hint="Al final de la lista"
+          onClick={() => void jump('bottom')}
+        />
+        <SheetItem
+          title="Borrar"
+          hint="No se puede deshacer"
+          danger
+          onClick={() => {
+            void removeSong(song.id);
+            onClose();
+          }}
+        />
       </div>
-    </div>
+    </Sheet>
   );
 }
 

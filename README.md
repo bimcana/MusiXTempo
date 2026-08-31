@@ -164,10 +164,19 @@ marca el **pulso**, no la negra.
 
 ### Sonidos
 
-**35 sonidos en 7 familias**, en un desplegable agrupado: clicks digitales, madera, metal,
-láminas, percusión, kits de batería y metrónomo mecánico. La lista sigue el vocabulario de los
-clicks de un DAW — Click II de Pro Tools, Klopfgeist de Logic, los click sounds de Cubase —
-porque es el que un músico ya conoce.
+**35 sonidos en 7 familias**: clicks digitales, madera, metal, láminas, percusión, kits de
+batería y metrónomo mecánico. La lista sigue el vocabulario de los clicks de un DAW — Click II
+de Pro Tools, Klopfgeist de Logic, los click sounds de Cubase — porque es el que un músico ya
+conoce.
+
+Cada fila lleva una **marca circular de favorito**, y los favoritos suben a un grupo propio en
+lo alto de la lista: con 35 sonidos, los cuatro o cinco que uno usa de verdad quedan siempre a
+la vista sin buscar. Marcar no cierra la hoja —marcar varios de golpe es el caso normal— y un
+favorito sigue apareciendo además en su familia, porque quitarlo de ahí rompería la memoria de
+dónde estaba.
+
+Es una hoja inferior y no un `<select>` nativo por una razón concreta: un `<select>` no admite
+controles dentro de sus opciones, así que no hay dónde poner la marca.
 
 Todo sintetizado en Web Audio: **cero bytes de assets, cero riesgo de licencia**. Y casi todo
 sale de cuatro generadores paramétricos, no de 35 funciones: un woodblock, una clave, un

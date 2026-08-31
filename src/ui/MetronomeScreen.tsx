@@ -9,12 +9,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pulsesPerBar, quartersPerPulse, subdivisionsPerPulse } from '../dsp/meter';
 import { optionsFor } from '../metronome/grooves';
-import { PACKS, findPack } from '../metronome/packs';
+import { findPack } from '../metronome/packs';
 import { Metronome } from '../metronome/scheduler';
 import { isIos } from '../audio/ios-unlock';
 import { useApp } from '../state/store';
 import type { Song } from '../data/db';
-import { PulseCanvas, Segmented, Select, StepGrid, TapTempo, type PulseState } from './components';
+import { PulseCanvas, Segmented, StepGrid, TapTempo, type PulseState } from './components';
+import { SoundPicker } from './SoundPicker';
 
 export function MetronomeScreen({ song }: { song: Song }) {
   const updateSong = useApp((s) => s.updateSong);
@@ -75,7 +76,18 @@ export function MetronomeScreen({ song }: { song: Song }) {
   // que es exactamente lo que este codigo dice evitar.
   const persistRef = useRef(persist);
   persistRef.current = persist;
-  useEffect(() => () => persistRef.current(), []);
+
+  useEffect(() => {
+    // Desmontar no basta. En movil nadie "vuelve atras": cambia de app o
+    // cierra la pestana, y ahi React no ejecuta ninguna limpieza. El
+    // unico evento que dispara de forma fiable en ese caso es `pagehide`.
+    const save = () => persistRef.current();
+    window.addEventListener('pagehide', save);
+    return () => {
+      window.removeEventListener('pagehide', save);
+      save();
+    };
+  }, []);
 
   const readPulse = useCallback((): PulseState | null => {
     const position = metronome.positionNow();
@@ -192,13 +204,7 @@ export function MetronomeScreen({ song }: { song: Song }) {
         onChange={setGrooveId}
       />
 
-      <Select
-        label="Sonido"
-        value={packId}
-        options={PACKS.map((p) => ({ value: p.id, label: p.name, group: p.family }))}
-        onChange={setPackId}
-        hint={findPack(packId).description}
-      />
+      <SoundPicker value={packId} onChange={setPackId} />
 
       <div>
         <div className="mb-1.5 text-[0.65rem] tracking-[0.14em] text-muted uppercase">Volumen</div>

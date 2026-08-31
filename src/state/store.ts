@@ -55,12 +55,15 @@ interface AppState {
   loaded: boolean;
   query: string;
   sortMode: SortMode;
+  /** Sonidos marcados como favoritos, en el orden en que se marcaron. */
+  favoriteSounds: string[];
 
   go: (screen: Screen) => void;
   loadLibrary: () => Promise<void>;
   setPending: (result: DetectionResult | null) => void;
   setQuery: (query: string) => void;
   setSortMode: (mode: SortMode) => void;
+  toggleFavoriteSound: (id: string) => void;
   visibleSongs: () => Song[];
   saveDetection: (
     title: string,
@@ -86,15 +89,17 @@ export const useApp = create<AppState>((set, get) => ({
   loaded: false,
   query: '',
   sortMode: 'manual',
+  favoriteSounds: [],
 
   go: (screen) => set({ screen }),
 
   loadLibrary: async () => {
-    const [songs, sortMode] = await Promise.all([
+    const [songs, sortMode, favoriteSounds] = await Promise.all([
       listSongs(),
-      readSetting<SortMode>('sortMode', 'manual')
+      readSetting<SortMode>('sortMode', 'manual'),
+      readSetting<string[]>('favoriteSounds', [])
     ]);
-    set({ songs, sortMode, loaded: true });
+    set({ songs, sortMode, favoriteSounds, loaded: true });
   },
 
   setPending: (pending) => set({ pending }),
@@ -104,6 +109,15 @@ export const useApp = create<AppState>((set, get) => ({
   setSortMode: (sortMode) => {
     set({ sortMode });
     void writeSetting('sortMode', sortMode);
+  },
+
+  toggleFavoriteSound: (id) => {
+    const current = get().favoriteSounds;
+    const favoriteSounds = current.includes(id)
+      ? current.filter((s) => s !== id)
+      : [...current, id];
+    set({ favoriteSounds });
+    void writeSetting('favoriteSounds', favoriteSounds);
   },
 
   visibleSongs: () => {

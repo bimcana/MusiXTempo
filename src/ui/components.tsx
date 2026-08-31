@@ -308,67 +308,72 @@ export function Segmented<T extends string>(props: {
 }
 
 /**
- * Desplegable con grupos. Es un `<select>` nativo a proposito: en movil
- * abre el selector del sistema, que para una lista de treinta sonidos se
- * recorre mucho mejor que cualquier lista propia — y ademas es accesible
- * de serie.
+ * Hoja inferior. Es el mismo patron que ya usa la biblioteca para sus
+ * acciones, y a diferencia de un `<select>` nativo deja meter controles
+ * dentro de cada fila — que es lo que hace falta para marcar favoritos
+ * sin salir de la lista.
  */
-export function Select<T extends string>(props: {
-  label?: string;
-  value: T;
-  options: { value: T; label: string; group?: string }[];
-  onChange: (value: T) => void;
-  hint?: string;
+export function Sheet(props: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
 }) {
-  const groups: { name: string; items: typeof props.options }[] = [];
-  for (const option of props.options) {
-    const name = option.group ?? '';
-    const last = groups[groups.length - 1];
-    if (last && last.name === name) last.items.push(option);
-    else groups.push({ name, items: [option] });
-  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') props.onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [props]);
 
   return (
-    <div>
-      {props.label && (
-        <div className="mb-1.5 text-[0.65rem] tracking-[0.14em] text-muted uppercase">
-          {props.label}
+    <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        aria-label="Cerrar"
+        onClick={props.onClose}
+        className="absolute inset-0 bg-black/60"
+      />
+      <div className="safe-bottom relative mx-auto flex max-h-[78vh] w-full max-w-lg flex-col rounded-t-2xl border-t border-line bg-surface">
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <h2 className="text-sm tracking-[0.14em] text-muted uppercase">{props.title}</h2>
+          <button type="button" onClick={props.onClose} className="px-2 py-1 text-sm text-signal">
+            Listo
+          </button>
         </div>
-      )}
-      <div className="relative">
-        <select
-          value={props.value}
-          onChange={(e) => props.onChange(e.target.value as T)}
-          aria-label={props.label}
-          className="w-full appearance-none rounded-lg border border-line bg-surface py-3 pr-10 pl-4 text-ink outline-none focus:border-signal"
-        >
-          {groups.map((group, i) =>
-            group.name ? (
-              <optgroup key={group.name + i} label={group.name}>
-                {group.items.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ) : (
-              group.items.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))
-            )
-          )}
-        </select>
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-signal"
-        >
-          ▾
-        </span>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{props.children}</div>
       </div>
-      {props.hint && <p className="mt-1.5 text-xs text-muted">{props.hint}</p>}
     </div>
+  );
+}
+
+/**
+ * Marca circular de favorito. Se dibuja en SVG y no con un caracter,
+ * para que el relleno y el trazo respondan al tema sin depender de como
+ * cada sistema renderice un emoji.
+ */
+export function CircleCheck({ on }: { on: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" className="shrink-0">
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        fill={on ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      {on && (
+        <path
+          d="M7.4 12.4l3.1 3.1 6.1-6.4"
+          fill="none"
+          stroke="#0e1216"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
   );
 }
 
