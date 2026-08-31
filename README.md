@@ -39,9 +39,14 @@ Todo el movimiento se aplica como `transform` directamente sobre el DOM — Reac
 renderizar en ningún frame del arrastre. Un reorder que provoque un render por movimiento de
 dedo se siente pegajoso en móvil, que es justo lo que el control existe para evitar.
 
-Menú de acciones por **pulsación larga**, clic derecho o el botón `⋯`, con *Mover arriba*
-(encabeza la lista), *Mover abajo* (al final) y *Borrar*. Con teclado, las flechas sobre la
-empuñadura mueven de una en una: es el único modo preciso, y sin puntero no hay arrastre.
+Menú de acciones por **pulsación larga** (móvil), **toque con dos dedos en el trackpad** o clic
+derecho (escritorio), o el botón `⋯`, con *Mover arriba* (encabeza la lista), *Mover abajo* (al
+final) y *Borrar*. El gesto se escucha en la **fila entera**, no solo sobre el título: en un
+trackpad el toque puede caer sobre la empuñadura o sobre `⋯`, y ahí también debe abrir el cuadro
+en vez del menú nativo del navegador.
+
+Con teclado, las flechas sobre la empuñadura mueven de una en una: es el único modo preciso, y
+sin puntero no hay arrastre.
 
 Cuatro modos de ordenación: **Mi orden**, **Título**, **BPM** y **Reciente**, recordados entre
 sesiones. El orden manual es *un modo*, no una capa sobre los demás: reordenar a mano dentro de

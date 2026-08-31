@@ -118,7 +118,8 @@ export function LibraryScreen() {
           ) : (
             visible.length > 1 && (
               <p className="text-xs text-muted">
-                Arrastra desde los puntos para mover. Mantén pulsada una canción para más opciones.
+                Arrastra desde los puntos para mover. Para más opciones, mantén pulsada una canción
+                o tócala con dos dedos en el trackpad.
               </p>
             )
           )}
@@ -205,7 +206,17 @@ function SongRow(props: {
   useEffect(() => cancelHold, []);
 
   return (
-    <li className={'relative flex items-stretch gap-2' + (isDragging ? ' opacity-95' : '')}>
+    <li
+      // El menu contextual se escucha en la fila entera, no solo en el
+      // titulo: en un trackpad el toque con dos dedos puede caer sobre
+      // la empunadura o sobre el boton de opciones, y ahi tambien tiene
+      // que abrir el cuadro en vez del menu nativo del navegador.
+      onContextMenu={(event) => {
+        event.preventDefault();
+        if (!isDragging) props.onOptions();
+      }}
+      className={'relative flex items-stretch gap-2' + (isDragging ? ' opacity-95' : '')}
+    >
       <GripHandle
         disabled={!draggable}
         active={isDragging}
@@ -237,10 +248,6 @@ function SongRow(props: {
         onPointerUp={cancelHold}
         onPointerLeave={cancelHold}
         onPointerCancel={cancelHold}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          props.onOptions();
-        }}
         onClick={() => {
           if (firedLong.current) {
             firedLong.current = false;
@@ -301,7 +308,6 @@ function GripHandle(props: {
       title={props.disabled ? undefined : 'Arrastra para mover'}
       onPointerDown={props.onPointerDown}
       onKeyDown={props.onKeyDown}
-      onContextMenu={(e) => e.preventDefault()}
       style={{ touchAction: 'none' }}
       className={
         'flex w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ' +
