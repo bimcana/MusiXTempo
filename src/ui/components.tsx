@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DetectionStage } from '../dsp/engine';
 import { formatTimeSignature, type TimeSignature } from '../dsp/meter';
-import { robustMean } from '../dsp/core';
+import { TapTrainer } from '../dsp/tap';
 
 /* ------------------------------------------------------------------ */
 /* Lectura de BPM                                                      */
@@ -406,29 +406,18 @@ export function MeterPicker(props: { value: TimeSignature; onChange: (m: TimeSig
 }
 
 /**
- * Tap tempo con mediana robusta: un toque mal dado se descarta en lugar
- * de arrastrar la media, que es lo que hace inservible al tap tempo
- * promediado.
+ * Tap tempo por regresion sobre toda la tanda (TapTrainer): el error
+ * humano de cada toque se promedia hacia cero, y un toque mal dado
+ * queda fuera del ajuste sin descarrilar la cifra.
  */
 export function TapTempo({ onTempo }: { onTempo: (bpm: number) => void }) {
-  const taps = useRef<number[]>([]);
+  const trainer = useRef(new TapTrainer());
   const [count, setCount] = useState(0);
 
   const tap = () => {
-    const now = performance.now();
-    const list = taps.current;
-    // Mas de dos segundos entre toques ya es otra medicion.
-    if (list.length > 0 && now - list[list.length - 1] > 2000) list.length = 0;
-    list.push(now);
-    if (list.length > 9) list.shift();
-    setCount(list.length);
-
-    if (list.length >= 3) {
-      const intervals: number[] = [];
-      for (let i = 1; i < list.length; i++) intervals.push(list[i] - list[i - 1]);
-      const ms = robustMean(intervals);
-      if (ms > 100) onTempo(60000 / ms);
-    }
+    const estimate = trainer.current.add(performance.now());
+    setCount(trainer.current.count);
+    if (estimate && estimate.count >= 3) onTempo(estimate.bpm);
   };
 
   return (

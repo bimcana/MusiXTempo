@@ -262,6 +262,8 @@ export class TempoEngine {
 
   private clipFrames = 0;
   private lastLevel = 0;
+  /** Referencia de tap del usuario: pulso marcado a mano, con calidad. */
+  private tapRef: { bpm: number; weight: number; atSeconds: number } | null = null;
   /** Croma acumulado de la sesion, ponderado por energia. */
   private readonly keyChroma = new Float64Array(12);
   private last: DetectionResult | null = null;
@@ -444,7 +446,7 @@ export class TempoEngine {
       const strongestSub = Math.max(meter.halfRatio, meter.thirdRatio);
       const tooSlow = clamp((strongestSub - 0.58) / 0.42, 0, 1);
 
-      const score =
+      let score =
         0.28 * cand.salience +
         0.2 * clamp(track.salience / 1.5, 0, 1) +
         0.12 * meter.subdivisionScore +
@@ -452,6 +454,17 @@ export class TempoEngine {
         0.16 * tempoPrior(bpm) -
         0.08 * residualPenalty -
         0.22 * tooSlow;
+
+      // Prior del tap: gaussiana estrecha (~4.5 %) sobre el PULSO. Solo
+      // el nivel que el usuario marca recibe el empujon; sus octavas no,
+      // que anclarlas es exactamente el trabajo de este prior. Caduca a
+      // los 30 s: si dejo de marcar hace medio minuto, ya no sabe mas
+      // que el tempograma.
+      const tap = this.tapRef;
+      if (tap && this.elapsedSeconds - tap.atSeconds < 30) {
+        const d = Math.log2(bpm / tap.bpm);
+        score += 0.3 * tap.weight * Math.exp(-(d * d) / (2 * 0.004));
+      }
 
       scored.push({
         lag: cand.lag,
@@ -746,6 +759,24 @@ export class TempoEngine {
     return this.last;
   }
 
+  /**
+   * El usuario esta marcando el pulso mientras suena: eso es la mejor
+   * referencia posible del NIVEL metrico sentido, y resuelve de raiz la
+   * ambiguedad de octava — el unico error que el tempograma no puede
+   * decidir solo, porque 100 y 200 son matematicamente parientes.
+   *
+   * No sustituye a la medicion: la orienta. El tap dice QUE nivel; los
+   * beats detectados siguen poniendo la cifra fina.
+   */
+  setTapReference(bpm: number, quality: number): void {
+    if (!Number.isFinite(bpm) || bpm < MIN_BPM || bpm > MAX_BPM) return;
+    this.tapRef = {
+      bpm,
+      weight: clamp(quality, 0, 1),
+      atSeconds: this.elapsedSeconds
+    };
+  }
+
   reset(): void {
     this.decimator.reset();
     this.features.reset();
@@ -773,6 +804,7 @@ export class TempoEngine {
     this.clipFrames = 0;
     this.lastLevel = 0;
     this.keyChroma.fill(0);
+    this.tapRef = null;
     this.last = null;
   }
 }

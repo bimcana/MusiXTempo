@@ -166,6 +166,31 @@ Tres decisiones concretas que resultaron ser las que más movieron la aguja:
   que el 3. Es el mismo test que separa un 12/8 de un 6/8, y corrige el sesgo de que agrupar en
   4 tenga el doble de fases candidatas que agrupar en 2.
 
+### Marca el pulso mientras suena: guía, verifica y entrena
+
+En Escuchar hay un pad de tap. Marcar el pulso mientras la canción suena hace tres cosas:
+
+1. **Guía al detector.** El tap del usuario es la mejor referencia posible del *nivel* métrico
+   sentido — resuelve de raíz la ambigüedad de octava, el único error que el tempograma no puede
+   decidir solo. El motor recibe la referencia como prior gaussiano estrecho (~4,5 %) sobre el
+   pulso: el tap dice *qué nivel*; los beats detectados siguen poniendo la cifra fina. Probado:
+   marcar 116 sobre un 6/8 con pulso 58 mueve al motor a 116,0.
+2. **Verifica en vivo.** La pantalla muestra tu pulso y el detectado, con «✓ el motor coincide»
+   o «guiando al motor…».
+3. **Entrena con casos reales.** Toda la sesión queda en un registro — cada lectura del motor y
+   cada tap, con marca de tiempo — exportable con «Copiar/Descargar informe de diagnóstico».
+   Con el usuario marcando el pulso real, el informe contiene la verdad y lo detectado lado a
+   lado: el material exacto para afinar el motor.
+
+### El tap promedia todos los toques (estilo BPM Tapper)
+
+Las tres superficies de tap (Escuchar, pestaña Tap, metrónomo) usan `TapTrainer`: regresión por
+mínimos cuadrados sobre **todos** los toques de la tanda, no los últimos ocho. El error humano
+de cada toque (±30 ms típicos) se promedia hacia cero y la precisión mejora cuanto más se marca.
+Un toque atípico queda fuera del ajuste sin descarrilar la cifra; marcar un pulso de cada dos
+sigue midiendo el pulso; una pausa larga arranca tanda nueva. Verificado con jitter de ±45 ms:
+la cifra queda clavada con ±15 ms de error promediado.
+
 ### La cifra es una media, no la última lectura
 
 `BeatAccumulator` acumula cada beat de la sesión como un par (índice, instante) y ajusta **una**

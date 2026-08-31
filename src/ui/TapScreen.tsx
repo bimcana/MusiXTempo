@@ -7,7 +7,7 @@
  */
 
 import { useRef, useState } from 'react';
-import { robustMean } from '../dsp/core';
+import { TapTrainer, type TapEstimate } from '../dsp/tap';
 import { quartersPerPulse, subdivisionsPerPulse, type TimeSignature } from '../dsp/meter';
 import { optionsFor } from '../metronome/grooves';
 import { DEFAULT_PACK_ID } from '../metronome/packs';
@@ -18,30 +18,21 @@ export function TapScreen() {
   const addManual = useApp((s) => s.addManual);
   const openSong = useApp((s) => s.openSong);
 
-  const [bpm, setBpm] = useState<number | null>(null);
+  const [estimate, setEstimate] = useState<TapEstimate | null>(null);
   const [count, setCount] = useState(0);
   const [meter, setMeter] = useState<TimeSignature>({ beatsPerBar: 4, beatUnit: 4 });
-  const taps = useRef<number[]>([]);
+  const trainer = useRef(new TapTrainer());
   const flashRef = useRef<HTMLDivElement>(null);
 
-  const tap = () => {
-    const now = performance.now();
-    const list = taps.current;
-    // Mas de dos segundos sin marcar es otra medicion.
-    if (list.length > 0 && now - list[list.length - 1] > 2000) {
-      list.length = 0;
-      setBpm(null);
-    }
-    list.push(now);
-    if (list.length > 12) list.shift();
-    setCount(list.length);
+  const bpm = estimate ? Math.round(estimate.bpm * 10) / 10 : null;
 
-    if (list.length >= 3) {
-      const intervals: number[] = [];
-      for (let i = 1; i < list.length; i++) intervals.push(list[i] - list[i - 1]);
-      const ms = robustMean(intervals);
-      if (ms > 100) setBpm(Math.round((60000 / ms) * 10) / 10);
-    }
+  const tap = () => {
+    // Regresion sobre TODOS los toques de la tanda (estilo BPM Tapper):
+    // el error humano de cada toque se promedia hacia cero y la cifra se
+    // afina cuanto mas se marca, en vez de bailar con cada toque nuevo.
+    const est = trainer.current.add(performance.now());
+    setEstimate(est);
+    setCount(trainer.current.count);
 
     // Destello sin pasar por el ciclo de render: el feedback del toque
     // tiene que ser instantaneo o el tap se siente esponjoso.
@@ -58,8 +49,8 @@ export function TapScreen() {
   };
 
   const reset = () => {
-    taps.current = [];
-    setBpm(null);
+    trainer.current.reset();
+    setEstimate(null);
     setCount(0);
   };
 
@@ -108,7 +99,10 @@ export function TapScreen() {
           <>
             <span className="tabular text-8xl font-semibold">{bpm.toFixed(1)}</span>
             <span className="mt-1 text-sm tracking-[0.2em] text-muted uppercase">BPM ♩</span>
-            <span className="tabular mt-2 text-xs text-muted">{count} toques · sigue marcando para afinar</span>
+            <span className="tabular mt-2 text-xs text-muted">
+              {count} toques · ±{estimate ? estimate.jitterMs.toFixed(0) : 0} ms de error humano
+              promediado · sigue marcando para afinar
+            </span>
           </>
         )}
       </button>

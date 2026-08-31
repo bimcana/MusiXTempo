@@ -15,6 +15,7 @@ import { Detector, type CaptureMode } from '../audio/detector';
 import { systemCaptureSupported } from '../audio/system-capture';
 import type { DetectionResult } from '../dsp/engine';
 import { pulsesPerBar } from '../dsp/meter';
+import { TapTrainer, type TapEstimate } from '../dsp/tap';
 import { identifySnippet } from '../songid/client';
 import type { IdentifyResult, StreamingLinks } from '../songid/types';
 import { useApp } from '../state/store';
@@ -31,9 +32,21 @@ export function ListenScreen() {
   const [elapsed, setElapsed] = useState(0);
   const [identifying, setIdentifying] = useState(false);
   const [identity, setIdentity] = useState<IdentifyResult | null>(null);
+  const [tapEstimate, setTapEstimate] = useState<TapEstimate | null>(null);
 
   const detectorRef = useRef<Detector | null>(null);
   const resultRef = useRef<DetectionResult | null>(null);
+  const trainerRef = useRef(new TapTrainer());
+  const startedAtRef = useRef(0);
+  const modeRef = useRef<CaptureMode>('mic');
+  /**
+   * Registro de la sesion: cada lectura del motor y cada tap del
+   * usuario, con marca de tiempo. Es el informe de diagnostico — con el
+   * usuario marcando el pulso real, el registro contiene la verdad y lo
+   * detectado, lado a lado.
+   */
+  const logRef = useRef<Record<string, unknown>[]>([]);
+  const tapFlashRef = useRef<HTMLButtonElement | null>(null);
   const snapshotRef = useRef<{ samples: Float32Array; sampleRate: number } | null>(null);
   const saveDetection = useApp((s) => s.saveDetection);
   const openSong = useApp((s) => s.openSong);
@@ -59,10 +72,29 @@ export function ListenScreen() {
     setOctaveShift(1);
     setTitle('');
 
+    trainerRef.current.reset();
+    setTapEstimate(null);
+    logRef.current = [];
+    startedAtRef.current = performance.now();
+    modeRef.current = mode;
+
     const detector = new Detector({
       onResult: (r) => {
         resultRef.current = r;
         setResult(r);
+        if (logRef.current.length < 4000) {
+          logRef.current.push({
+            t: Math.round((performance.now() - startedAtRef.current) / 100) / 10,
+            tipo: 'lectura',
+            bpm: r.bpm,
+            pulso: r.bpmPulse,
+            compas: r.meter.beatsPerBar + '/' + r.meter.beatUnit,
+            etapa: r.stage,
+            confianza: Math.round(r.confidence * 100) / 100,
+            pulsos: r.beatsCounted,
+            nivel: Math.round(r.level * 100) / 100
+          });
+        }
       },
       onError: (e) => setError(e.message)
     });
@@ -111,6 +143,87 @@ export function ListenScreen() {
     }
     setPhase('result');
     void runIdentification();
+  };
+
+  /**
+   * El usuario marca el pulso MIENTRAS suena. Tres efectos: la cifra de
+   * su tap se promedia por regresion (el error humano tiende a cero), el
+   * motor recibe la referencia como prior de nivel metrico, y todo queda
+   * en el registro para afinar el motor con casos reales.
+   */
+  const tapAlong = () => {
+    const estimate = trainerRef.current.add(performance.now());
+    setTapEstimate(estimate);
+    if (estimate && estimate.count >= 3) {
+      detectorRef.current?.sendTapReference(estimate.bpm, estimate.quality);
+    }
+    if (logRef.current.length < 4000) {
+      logRef.current.push({
+        t: Math.round((performance.now() - startedAtRef.current) / 100) / 10,
+        tipo: 'tap',
+        bpm: estimate ? Math.round(estimate.bpm * 10) / 10 : null,
+        toques: estimate ? estimate.count : trainerRef.current.count
+      });
+    }
+    const el = tapFlashRef.current;
+    if (el) {
+      el.style.borderColor = '#f5b33f';
+      setTimeout(() => {
+        el.style.borderColor = '';
+      }, 130);
+    }
+    if (navigator.vibrate) navigator.vibrate(6);
+  };
+
+  const buildReport = () => {
+    const r = resultRef.current;
+    const tap = trainerRef.current.estimate();
+    return JSON.stringify(
+      {
+        app: 'MusixTempo',
+        fecha: new Date().toISOString(),
+        modo: modeRef.current === 'system' ? 'audio del sistema' : 'microfono',
+        userAgent: navigator.userAgent,
+        resumen: {
+          deteccionFinal: r
+            ? {
+                bpm: r.bpm,
+                pulso: r.bpmPulse,
+                compas: r.meter.beatsPerBar + '/' + r.meter.beatUnit,
+                tonalidad: r.key ? r.key.name : null,
+                confianza: r.confidence,
+                pulsosPromediados: r.beatsCounted
+              }
+            : null,
+          tapDelUsuario: tap
+            ? { bpm: Math.round(tap.bpm * 10) / 10, toques: tap.count, jitterMs: tap.jitterMs }
+            : null
+        },
+        registro: logRef.current
+      },
+      null,
+      1
+    );
+  };
+
+  const copyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(buildReport());
+      setError(null);
+    } catch {
+      setError('No se pudo copiar. Usa el boton Descargar.');
+    }
+  };
+
+  const downloadReport = () => {
+    const blob = new Blob([buildReport()], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download =
+      'musixtempo-informe-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   const readPulse = useCallback((): PulseState | null => {
@@ -227,6 +340,44 @@ export function ListenScreen() {
             </p>
           )}
 
+          {/* Marcar el pulso mientras suena: promedia el tap por
+              regresion, guia al motor al nivel sentido y alimenta el
+              informe de diagnostico. */}
+          <button
+            ref={tapFlashRef}
+            type="button"
+            onPointerDown={tapAlong}
+            className="w-full max-w-sm rounded-xl border-2 border-line bg-surface-2 px-4 py-5 text-center transition-colors select-none"
+          >
+            {tapEstimate === null ? (
+              <>
+                <span className="block text-sm tracking-[0.14em] uppercase">
+                  Marca el pulso aquí
+                </span>
+                <span className="mt-1 block text-xs text-muted">
+                  Tu tap guía al detector y queda en el informe
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="tabular block text-2xl font-semibold">
+                  {tapEstimate.bpm.toFixed(1)}
+                  <span className="ml-2 text-sm font-normal text-muted">tu pulso</span>
+                </span>
+                <span className="tabular mt-1 block text-xs text-muted">
+                  {tapEstimate.count} toques · ±{tapEstimate.jitterMs.toFixed(0)} ms promediados
+                  {result &&
+                    result.bpmPulse > 0 &&
+                    (Math.abs(Math.log2(result.bpmPulse / tapEstimate.bpm)) < 0.09 ? (
+                      <span className="text-ok"> · ✓ el motor coincide</span>
+                    ) : (
+                      <span className="text-signal"> · guiando al motor…</span>
+                    ))}
+                </span>
+              </>
+            )}
+          </button>
+
           {/* Senal debil sostenida: el diagnostico mas util que la app
               puede dar, porque cada causa tiene remedio distinto. */}
           {result && elapsed > 6000 && result.level < 0.05 && !result.clipping && (
@@ -316,6 +467,15 @@ export function ListenScreen() {
             placeholder="Título de la canción"
             className="w-full rounded-lg border border-line bg-surface px-4 py-3 outline-none placeholder:text-muted focus:border-signal"
           />
+
+          <div className="flex items-center justify-center gap-4 text-xs">
+            <button type="button" onClick={() => void copyReport()} className="text-muted underline">
+              Copiar informe de diagnóstico
+            </button>
+            <button type="button" onClick={downloadReport} className="text-muted underline">
+              Descargar
+            </button>
+          </div>
 
           <div className="flex gap-3">
             <button

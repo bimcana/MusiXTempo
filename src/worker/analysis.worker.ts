@@ -30,6 +30,10 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       break;
     }
 
+    case 'tap-reference':
+      engine?.setTapReference(message.bpm, message.quality);
+      break;
+
     case 'reset':
       engine?.reset();
       break;

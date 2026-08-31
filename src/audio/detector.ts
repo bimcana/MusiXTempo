@@ -116,6 +116,12 @@ export class Detector {
     this.worker.postMessage(init);
   }
 
+  /** Reenvia al motor el pulso que el usuario esta marcando a mano. */
+  sendTapReference(bpm: number, quality: number): void {
+    const message: ToWorker = { type: 'tap-reference', bpm, quality };
+    this.worker?.postMessage(message);
+  }
+
   stop(): void {
     this.capture?.stop();
     this.system?.stop();
