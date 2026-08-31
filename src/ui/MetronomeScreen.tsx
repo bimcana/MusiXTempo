@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { pulsesPerBar, subdivisionsPerPulse } from '../dsp/meter';
+import { pulsesPerBar, quartersPerPulse, subdivisionsPerPulse } from '../dsp/meter';
 import { optionsFor } from '../metronome/grooves';
 import { PACKS } from '../metronome/packs';
 import { Metronome } from '../metronome/scheduler';
@@ -38,8 +38,13 @@ export function MetronomeScreen({ song }: { song: Song }) {
     [grooves, grooveId]
   );
 
+  // El usuario ve y edita NEGRAS; el scheduler necesita el pulso
+  // sentido, que en compas compuesto no es lo mismo.
+  const quartersPer = quartersPerPulse(song.meter);
+  const pulseBpm = bpm / quartersPer;
+
   useEffect(() => () => metronome.dispose(), [metronome]);
-  useEffect(() => metronome.setTempo(bpm), [metronome, bpm]);
+  useEffect(() => metronome.setTempo(pulseBpm), [metronome, pulseBpm]);
   useEffect(() => metronome.setVolume(volume), [metronome, volume]);
   useEffect(() => metronome.setGroove(grooveId), [metronome, grooveId]);
   useEffect(() => metronome.setPack(packId), [metronome, packId]);
@@ -115,14 +120,14 @@ export function MetronomeScreen({ song }: { song: Song }) {
 
         <div className="flex items-baseline gap-3">
           <span className="tabular text-6xl font-semibold">{Math.round(bpm)}</span>
-          <span className="text-sm tracking-[0.18em] text-muted uppercase">BPM</span>
+          <span className="text-sm tracking-[0.18em] text-muted uppercase">BPM ♩</span>
           <span className="rounded bg-signal-dim px-2 py-0.5 text-signal">
             {song.meter.beatsPerBar}/{song.meter.beatUnit}
           </span>
         </div>
         {compound && (
           <span className="tabular text-sm text-muted">
-            = {Math.round(bpm * 3)} corcheas
+            pulso {pulseBpm.toFixed(1)} · {Math.round(pulseBpm * 3)} corcheas
           </span>
         )}
 

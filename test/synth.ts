@@ -474,6 +474,42 @@ const P = {
 
 export const PATTERNS = P;
 
+/**
+ * Version suave de un patron: sin bombo ni caja, solo textura tenue.
+ * Es la intro de medio tiempo lento del mundo — y el caso que arrastra
+ * la cifra si el motor promedia lecturas en vez de evidencia.
+ */
+export function soften(pattern: Pattern): Pattern {
+  return {
+    kick: pattern.kick.map(() => 0),
+    snare: pattern.snare.map(() => 0),
+    hat: pattern.hat.map((v, i) => (i === 0 ? Math.min(0.5, v * 0.35) : v * 0.18))
+  };
+}
+
+/**
+ * Arreglo por secciones: intro floja, entrada de bateria, etc. Concatena
+ * los tramos tal cual, sin fundido, porque un cambio de seccion es un
+ * cambio real y el motor tiene que aguantarlo.
+ */
+export function renderArrangement(
+  sections: { piece: PieceSpec; seconds: number }[],
+  opts: RenderOptions = {}
+): Float32Array {
+  const sr = opts.sampleRate ?? 44100;
+  const parts = sections.map((section, i) =>
+    renderPiece(section.piece, { ...opts, sampleRate: sr, seconds: section.seconds, seed: (opts.seed ?? 1) + i * 7919 })
+  );
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Float32Array(total);
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.length;
+  }
+  return out;
+}
+
 /** Corpus por defecto: cobertura ancha, con carga extra en 4/4 y 6/8. */
 export function defaultCorpus(): PieceSpec[] {
   const pieces: PieceSpec[] = [];

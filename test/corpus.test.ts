@@ -8,18 +8,31 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeBuffer } from '../src/dsp/engine';
 import { HeuristicArbiter } from '../src/arbiter';
-import { MeterConfusion, TempoScorer } from './metrics';
+import { accuracy1, MeterConfusion, TempoScorer } from './metrics';
+import { quartersPerPulse } from '../src/dsp/meter';
 import {
   defaultCorpus,
   hummingCorpus,
   makePiece,
   PATTERNS,
+  renderArrangement,
   renderHumming,
-  renderPiece
+  renderPiece,
+  soften
 } from './synth';
 
 const SR = 44100;
 const engineOpts = () => ({ arbiter: new HeuristicArbiter(), updateIntervalMs: 500 });
+
+/**
+ * El corpus etiqueta el PULSO sentido, pero la app muestra NEGRAS — la
+ * convencion de los DAW. Las pruebas comprueban lo que el usuario ve,
+ * asi que la referencia se convierte aqui: en 4/4 no cambia nada, en
+ * 6/8 la negra va una vez y media mas rapida que el pulso.
+ */
+function expectedQuarters(piece: { bpm: number; expectedMeter: { beatsPerBar: number; beatUnit: number } }): number {
+  return piece.bpm * quartersPerPulse(piece.expectedMeter);
+}
 
 /**
  * Umbrales fijados justo por debajo de lo que el motor logra hoy: dejan
@@ -62,7 +75,7 @@ describe('corpus sintetico', () => {
         seed: hash(piece.id)
       });
       const result = analyzeBuffer(audio, SR, engineOpts());
-      tempo.add(piece.id, result?.bpm ?? null, piece.bpm);
+      tempo.add(piece.id, result?.bpm ?? null, expectedQuarters(piece));
       meters.add(piece.expectedMeter, result?.meter ?? null);
     }
 
@@ -92,7 +105,7 @@ describe('corpus sintetico', () => {
         seed: hash(piece.id + 'seco')
       });
       const result = analyzeBuffer(audio, SR, engineOpts());
-      tempo.add(piece.id, result?.bpm ?? null, piece.bpm);
+      tempo.add(piece.id, result?.bpm ?? null, expectedQuarters(piece));
       meters.add(piece.expectedMeter, result?.meter ?? null);
     }
 
@@ -121,7 +134,7 @@ describe('corpus sintetico', () => {
         seed: hash(piece.id + 'hostil')
       });
       const result = analyzeBuffer(audio, SR, engineOpts());
-      tempo.add(piece.id, result?.bpm ?? null, piece.bpm);
+      tempo.add(piece.id, result?.bpm ?? null, expectedQuarters(piece));
     }
 
     const report = tempo.report();
@@ -144,13 +157,44 @@ describe('corpus sintetico', () => {
         seed: hash(spec.id)
       });
       const result = analyzeBuffer(audio, SR, engineOpts());
-      tempo.add(spec.id, result?.bpm ?? null, spec.bpm);
+      tempo.add(spec.id, result?.bpm ?? null, expectedQuarters(spec));
     }
 
     const report = tempo.report();
     printReport('tarareo', report, null);
     expect(report.acc1).toBeGreaterThanOrEqual(THRESHOLDS.hummingAcc1);
     expect(report.acc2).toBeGreaterThanOrEqual(THRESHOLDS.hummingAcc2);
+  });
+
+  it('no deja que una intro floja arrastre la cifra de la parte fuerte', () => {
+    // El caso de una alabanza tipica: entra suave, sin bateria, y luego
+    // arranca la banda entera. Si el motor promediase LECTURAS, la intro
+    // hundiria la cifra; promediando evidencia, la seccion nitida pesa
+    // mucho mas porque su tempograma es mucho mas claro.
+    const bpm = 140;
+    const fuerte = makePiece('fuerte', bpm, 4, 'binary', PATTERNS.rock44);
+    const suave = makePiece('suave', bpm, 4, 'binary', soften(PATTERNS.rock44));
+
+    const audio = renderArrangement(
+      [
+        { piece: suave, seconds: 9 },
+        { piece: fuerte, seconds: 15 }
+      ],
+      { sampleRate: SR, humanizeSec: 0.008, noise: 0.006, reverb: 0.18, bass: true, seed: 20260830 }
+    );
+
+    const result = analyzeBuffer(audio, SR, engineOpts());
+    log(
+      '\n=== intro suave + seccion fuerte ===\n  esperado ' +
+        bpm +
+        ' -> ' +
+        (result ? result.bpm.toFixed(1) + ' · ' + result.meterLabel + ' · ' + result.beatsCounted + ' pulsos promediados' : 'sin resultado')
+    );
+
+    expect(result).not.toBeNull();
+    expect(accuracy1(result!.bpm, bpm)).toBe(true); // 4/4: negra = pulso
+    // La media tiene que apoyarse en evidencia real, no en dos pulsos.
+    expect(result!.beatsCounted).toBeGreaterThan(20);
   });
 
   it('separa 6/8 de 4/4 con swing, que es el caso duro', () => {

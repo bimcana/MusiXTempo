@@ -22,7 +22,10 @@ const STAGE_LABEL: Record<DetectionStage, string> = {
 };
 
 export function BpmDisplay(props: {
+  /** Negras por minuto: el titular. */
   bpm: number;
+  /** Pulso sentido: lo que se cuenta con el pie. */
+  bpmPulse: number;
   bpmAlt: number;
   meter: TimeSignature;
   meterLabel: string;
@@ -30,8 +33,9 @@ export function BpmDisplay(props: {
   confidence?: number;
   dim?: boolean;
 }) {
-  const compound = props.meter.beatUnit === 8 && props.meter.beatsPerBar % 3 === 0;
-  const altLabel = compound ? 'corcheas' : 'corcheas';
+  // En compas simple el pulso ES la negra, y repetir el numero solo
+  // anade ruido. En compuesto son cosas distintas y hay que decirlo.
+  const compound = props.bpmPulse > 0 && Math.abs(props.bpmPulse - props.bpm) > 0.15;
 
   return (
     <div className="flex flex-col items-center">
@@ -46,7 +50,7 @@ export function BpmDisplay(props: {
       </div>
 
       <div className="mt-2 flex items-baseline gap-3">
-        <span className="text-sm tracking-[0.2em] text-muted uppercase">BPM</span>
+        <span className="text-sm tracking-[0.2em] text-muted uppercase">BPM ♩</span>
         <span
           className={
             'tabular rounded px-2 py-0.5 text-lg font-semibold ' +
@@ -57,12 +61,21 @@ export function BpmDisplay(props: {
         </span>
       </div>
 
-      {/* En compas compuesto siempre se muestran las dos lecturas: el
-          pulso sentido arriba y la subdivision debajo. Es lo que evita
-          que 6/8 signifique dos cosas distintas segun quien lo lea. */}
-      <div className="tabular mt-2 text-sm text-muted">
-        = {props.bpmAlt.toFixed(1)} {altLabel}
-      </div>
+      {/* El titular son negras, la convencion de cualquier DAW y lo que
+          se teclea en un click. Pero en compas compuesto la negra no es
+          lo que cuentas con el pie, asi que el pulso sentido va justo
+          debajo: sin eso, 6/8 significa dos cosas distintas segun quien
+          lo lea. */}
+      {compound && (
+        <div className="tabular mt-2 text-sm text-muted">
+          pulso {props.bpmPulse.toFixed(1)} · {props.bpmAlt.toFixed(1)} corcheas
+        </div>
+      )}
+      {!compound && (
+        <div className="tabular mt-2 text-sm text-muted">
+          = {props.bpmAlt.toFixed(1)} corcheas
+        </div>
+      )}
 
       {props.stage && (
         <div className="mt-4 flex items-center gap-2">

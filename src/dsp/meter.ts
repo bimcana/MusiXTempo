@@ -395,6 +395,20 @@ export function subdivisionsPerPulse(sig: TimeSignature): number {
   return sig.beatUnit === 8 && sig.beatsPerBar % 3 === 0 ? 3 : 2;
 }
 
+/**
+ * Cuantas negras dura un pulso sentido.
+ *
+ * Todos los DAW expresan el tempo en negras por minuto sea cual sea el
+ * compas, y es tambien lo que un baterista teclea en su click. En
+ * compuesto el pulso es una negra con puntillo, que son una negra y
+ * media: de ahi el 1.5. En un 7/8 el pulso es una corchea, media negra.
+ */
+export function quartersPerPulse(sig: TimeSignature): number {
+  if (sig.beatUnit === 8) return sig.beatsPerBar % 3 === 0 ? 1.5 : 0.5;
+  if (sig.beatUnit === 2) return 2;
+  return 1;
+}
+
 export function formatTimeSignature(sig: TimeSignature): string {
   return sig.beatsPerBar + '/' + sig.beatUnit;
 }

@@ -4,13 +4,15 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { Subdivision, TimeSignature } from '../dsp/meter';
+import { quartersPerPulse, type Subdivision, type TimeSignature } from '../dsp/meter';
 
 export interface Song {
   id: string;
   title: string;
-  /** Pulso sentido. */
+  /** NEGRAS por minuto: convencion de los DAW, es lo que se muestra. */
   bpm: number;
+  /** Pulso sentido: lo que marca el metronomo. En 4/4 coincide con bpm. */
+  bpmPulse: number;
   /** La subdivision: corcheas, o corcheas de tresillo en compuesto. */
   bpmAlt: number;
   meter: TimeSignature;
@@ -46,7 +48,7 @@ let dbPromise: Promise<IDBPDatabase<MusixTempoDB>> | null = null;
 
 function db(): Promise<IDBPDatabase<MusixTempoDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<MusixTempoDB>('musixtempo', 2, {
+    dbPromise = openDB<MusixTempoDB>('musixtempo', 3, {
       async upgrade(database, oldVersion, _newVersion, tx) {
         if (oldVersion < 1) {
           const songs = database.createObjectStore('songs', { keyPath: 'id' });
@@ -63,6 +65,16 @@ function db(): Promise<IDBPDatabase<MusixTempoDB>> {
           let position = 0;
           for (const song of existing) {
             await store.put({ ...song, order: position++ * ORDER_GAP });
+          }
+        }
+        if (oldVersion < 3) {
+          // Hasta la v2 el campo `bpm` guardaba el pulso sentido. Ahora
+          // guarda negras, asi que en compas compuesto hay que convertir
+          // o las canciones antiguas apareceria un tercio mas lentas.
+          const store = tx.objectStore('songs');
+          for (const song of await store.getAll()) {
+            const pulse = song.bpmPulse ?? song.bpm;
+            await store.put({ ...song, bpmPulse: pulse, bpm: pulse * quartersPerPulse(song.meter) });
           }
         }
       }

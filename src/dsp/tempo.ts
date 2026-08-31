@@ -83,9 +83,30 @@ export function computeTempogram(
 
   for (let lag = minLag; lag <= maxLag; lag++) salience[lag] /= maxSal;
 
-  // Picos locales, ordenados por prominencia.
+  return {
+    salience,
+    minLag,
+    maxLag,
+    candidates: findPeaks(salience, minLag, maxLag, frameRate, topK)
+  };
+}
+
+/**
+ * Picos locales de una curva de prominencia, interpolados y ordenados.
+ * Se separa de `computeTempogram` porque el motor los busca sobre el
+ * tempograma ACUMULADO de toda la escucha, no sobre el de la ultima
+ * ventana.
+ */
+export function findPeaks(
+  salience: Float32Array,
+  minLag: number,
+  maxLag: number,
+  frameRate: number,
+  topK: number
+): TempoCandidate[] {
   const peaks: TempoCandidate[] = [];
-  for (let lag = minLag + 1; lag < maxLag; lag++) {
+  const top = Math.min(maxLag, salience.length - 2);
+  for (let lag = minLag + 1; lag < top; lag++) {
     if (salience[lag] > salience[lag - 1] && salience[lag] >= salience[lag + 1]) {
       const { offset, value } = parabolicPeak(salience, lag);
       const refined = lag + offset;
@@ -93,8 +114,7 @@ export function computeTempogram(
     }
   }
   peaks.sort((a, b) => b.salience - a.salience);
-
-  return { salience, minLag, maxLag, candidates: peaks.slice(0, topK) };
+  return peaks.slice(0, topK);
 }
 
 /**

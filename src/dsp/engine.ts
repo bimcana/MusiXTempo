@@ -28,6 +28,7 @@ import {
   type TimeSignature,
   analyzeMeter,
   meterLabel,
+  quartersPerPulse,
   subdivisionsPerPulse,
   toTimeSignature
 } from './meter';
@@ -36,8 +37,14 @@ import type { ArbiterCandidate, TempoArbiter } from '../arbiter/types';
 export type DetectionStage = 'provisional' | 'stable' | 'refined';
 
 export interface DetectionResult {
-  /** Pulso sentido, decimal. */
+  /**
+   * NEGRAS por minuto: la convencion de los DAW y lo que un baterista
+   * teclea en su click, sea cual sea el compas. En 4/4 coincide con el
+   * pulso; en 6/8 es una vez y media el pulso sentido.
+   */
   bpm: number;
+  /** Pulso sentido: la negra con puntillo en compas compuesto. */
+  bpmPulse: number;
   /** La subdivision: corcheas en simple, corcheas de tresillo en compuesto. */
   bpmAlt: number;
   meter: TimeSignature;
@@ -50,6 +57,11 @@ export interface DetectionResult {
   nextDownbeatAt: number;
   stage: DetectionStage;
   elapsedMs: number;
+  /**
+   * Pulsos que sostienen la media. Es la evidencia acumulada, y crece
+   * mientras escuchas: por eso la cifra deja de bailar.
+   */
+  beatsCounted: number;
   clipping: boolean;
   /** Nivel de senal 0..1, para el medidor de entrada. */
   level: number;
@@ -84,9 +96,117 @@ interface ScoredCandidate {
   score: number;
   phase: number;
   windowStartFrame: number;
+  beats: Int32Array;
 }
 
 const CLIP_THRESHOLD = 0.985;
+
+/**
+ * A partir de aqui la ventana ya cubre varios periodos incluso en los
+ * tempos lentos, y la hipotesis se puede tomar en serio: antes se
+ * muestra, pero no se fija ni se promedia.
+ */
+const COMMIT_SECONDS = 3.5;
+
+/**
+ * Ajuste global de los beats de TODA la escucha.
+ *
+ * En vez de quedarse con la lectura de la ultima ventana, acumula cada
+ * beat detectado como un par (indice, instante) y ajusta una sola recta
+ * por minimos cuadrados sobre todos ellos — que es, literalmente, lo que
+ * hace alguien que va marcando el pulso sobre la cancion y promedia.
+ *
+ * Se lleva con sumas incrementales, asi que no crece en memoria y la
+ * precision solo mejora cuanto mas tiempo escuchas.
+ */
+class BeatAccumulator {
+  private anchor = 0;
+  private period = 0;
+  private last = -Infinity;
+  private n = 0;
+  private sk = 0;
+  private st = 0;
+  private skk = 0;
+  private skt = 0;
+
+  get count(): number {
+    return this.n;
+  }
+
+  restart(periodSeconds: number, firstBeatTime: number): void {
+    this.anchor = firstBeatTime;
+    this.period = periodSeconds;
+    this.last = -Infinity;
+    this.n = 0;
+    this.sk = 0;
+    this.st = 0;
+    this.skk = 0;
+    this.skt = 0;
+  }
+
+  /**
+   * Incorpora los beats nuevos. Devuelve false cuando el modelo deja de
+   * describir lo que suena — un cambio real de tempo o de cancion — para
+   * que el motor reinicie en vez de promediar dos cosas distintas.
+   */
+  add(times: readonly number[]): boolean {
+    if (this.period <= 0) return true;
+    let added = 0;
+    let rejected = 0;
+
+    for (const t of times) {
+      // Las ventanas se solapan: un beat ya contado no vuelve a contar.
+      if (t <= this.last + this.period * 0.5) continue;
+      const k = Math.round((t - this.anchor) / this.period);
+      if (this.n >= 6) {
+        const predicted = this.predict(k);
+        if (predicted !== null && Math.abs(t - predicted) > this.period * 0.35) {
+          rejected++;
+          continue;
+        }
+      }
+      this.n++;
+      this.sk += k;
+      this.st += t;
+      this.skk += k * k;
+      this.skt += k * t;
+      this.last = t;
+      added++;
+    }
+
+    // El periodo de referencia se refina con el propio ajuste, para que
+    // asignar indices no derive en escuchas largas.
+    const slope = this.slope();
+    if (slope !== null && slope > 0) this.period = slope;
+
+    return !(added === 0 && rejected >= 3);
+  }
+
+  private slope(): number | null {
+    if (this.n < 6) return null;
+    const denom = this.n * this.skk - this.sk * this.sk;
+    if (Math.abs(denom) < 1e-9) return null;
+    return (this.n * this.skt - this.sk * this.st) / denom;
+  }
+
+  private intercept(slope: number): number {
+    return (this.st - slope * this.sk) / this.n;
+  }
+
+  private predict(k: number): number | null {
+    const slope = this.slope();
+    if (slope === null) return null;
+    return this.intercept(slope) + slope * k;
+  }
+
+  /** BPM promediado sobre toda la escucha, o null si aun no hay bastante. */
+  bpm(): number | null {
+    const slope = this.slope();
+    if (slope === null || slope <= 0) return null;
+    const bpm = 60 / slope;
+    return bpm >= MIN_BPM && bpm <= MAX_BPM ? bpm : null;
+  }
+}
 
 export class TempoEngine {
   readonly analysisSampleRate: number;
@@ -122,6 +242,7 @@ export class TempoEngine {
 
   private lockedPeriod: number | null = null;
   private smoothedBpm = 0;
+  private readonly beatFit = new BeatAccumulator();
   private meterVotes: string[] = [];
   private bpmHistory: number[] = [];
 
@@ -233,7 +354,7 @@ export class TempoEngine {
     const framesPerUpdate = Math.max(1, Math.round((this.opts.updateIntervalMs / 1000) * this.frameRate));
     if (this.frameCount - this.lastAnalysisFrame < framesPerUpdate) return null;
     // Por debajo de 1.6 s no hay ventana suficiente ni para lo provisional.
-    if (this.elapsedSeconds < 1.6) return null;
+    if (this.elapsedSeconds < 1.5) return null;
     this.lastAnalysisFrame = this.frameCount;
     return this.analyze();
   }
@@ -256,8 +377,13 @@ export class TempoEngine {
     // afirmar nada sobre 40 BPM.
     const maxLagLimit = Math.floor(winFrames / 2.5);
     const tg = computeTempogram(onset, this.frameRate, 8, maxLagLimit);
-    if (tg.candidates.length === 0) return null;
+    if (tg.maxLag <= tg.minLag + 2) return null;
 
+    // La HIPOTESIS se elige siempre sobre la ventana actual. Promediar
+    // el tempograma de toda la escucha refuerza por igual el periodo
+    // real y su armonico al doble, y ahi se pierde el desempate de
+    // octava. Lo que se promedia es la CIFRA, mas abajo, sobre los
+    // beats — donde promediar anade precision en vez de borrarla.
     const pool = expandCandidates(tg.candidates, this.frameRate, tg.salience)
       .sort((a, b) => b.salience - a.salience)
       .slice(0, 7);
@@ -313,7 +439,8 @@ export class TempoEngine {
         groupingScore: meter.groupingScore,
         score,
         phase: fit ? fit.phase : track.beats[0],
-        windowStartFrame
+        windowStartFrame,
+        beats: track.beats
       });
     }
 
@@ -323,7 +450,13 @@ export class TempoEngine {
 
     // Adherencia a la hipotesis vigente: evita saltar de nivel metrico
     // por una sola ventana mala.
-    if (this.lockedPeriod !== null) {
+    //
+    // Solo desde que hay ventana suficiente. Antes de eso la hipotesis
+    // se apoya en poco mas de un periodo, y premiarla congelaria una
+    // suposicion mal informada — que es justo como un tarareo lento
+    // acaba leido al doble de velocidad. La adherencia esta para
+    // resistir ruido, no para petrificar la primera corazonada.
+    if (this.lockedPeriod !== null && this.elapsedSeconds >= COMMIT_SECONDS) {
       for (const c of scored) {
         if (Math.abs(Math.log2(c.period / this.lockedPeriod)) < 0.03) c.score += 0.08;
       }
@@ -341,6 +474,26 @@ export class TempoEngine {
     this.smoothedBpm = sameHypothesis && this.smoothedBpm > 0
       ? this.smoothedBpm * 0.72 + best.bpm * 0.28
       : best.bpm;
+
+    // Ajuste global: si cambiamos de nivel metrico, los indices de beat
+    // anteriores dejan de significar lo mismo y hay que empezar de cero.
+    const periodSeconds = best.period / this.frameRate;
+    const beatTimes: number[] = [];
+    for (const frame of best.beats) {
+      beatTimes.push(this.frameToAudioTime(best.windowStartFrame + frame));
+    }
+    // La media tampoco empieza antes de tiempo: acumular los primeros
+    // segundos solo mete en el promedio la parte menos fiable.
+    if (this.elapsedSeconds < COMMIT_SECONDS) {
+      this.beatFit.restart(periodSeconds, beatTimes[0] ?? 0);
+    } else {
+      if (!sameHypothesis || this.beatFit.count === 0) {
+        this.beatFit.restart(periodSeconds, beatTimes[0] ?? 0);
+      }
+      if (beatTimes.length > 0 && !this.beatFit.add(beatTimes)) {
+        this.beatFit.restart(periodSeconds, beatTimes[beatTimes.length - 1]);
+      }
+    }
 
     this.bpmHistory.push(this.smoothedBpm);
     if (this.bpmHistory.length > 6) this.bpmHistory.shift();
@@ -361,8 +514,22 @@ export class TempoEngine {
     const subdivision = votedSub as Subdivision;
 
     const meter = toTimeSignature(pulses, subdivision);
-    const bpm = this.smoothedBpm;
-    const bpmAlt = bpm * subdivisionsPerPulse(meter);
+    // La cifra sale del ajuste sobre TODOS los beats de la escucha, no
+    // de la ultima ventana: es lo que hace alguien que va marcando el
+    // pulso sobre la cancion y promedia, y por eso la precision mejora
+    // cuanto mas escuchas.
+    //
+    // Pero el promedio solo REFINA; nunca contradice. Si se aleja mas de
+    // un 6 % de la hipotesis viva, es que el motor cambio de nivel
+    // metrico o cambio la musica, y perpetuar la media seria arrastrar
+    // un error antiguo en vez de corregirlo.
+    const fitted = this.beatFit.bpm();
+    const bpmPulse =
+      fitted !== null && this.smoothedBpm > 0 && Math.abs(Math.log2(fitted / this.smoothedBpm)) < 0.09
+        ? fitted
+        : this.smoothedBpm;
+    const bpm = bpmPulse * quartersPerPulse(meter);
+    const bpmAlt = bpmPulse * subdivisionsPerPulse(meter);
 
     const period = this.lockedPeriod ?? best.period;
     const now = this.frameToAudioTime(this.frameCount);
@@ -378,15 +545,23 @@ export class TempoEngine {
     const nextDownbeatAt = this.frameToAudioTime(beat0Frame + dk * period);
 
     const spread = bpmSpread(this.bpmHistory);
-    const stability = 1 - clamp(spread / (0.05 * Math.max(1, bpm)), 0, 1);
+    const stability = 1 - clamp(spread / (0.05 * Math.max(1, bpmPulse)), 0, 1);
     const agreement = this.verdict ? this.verdict.agreement : 1;
+    // Cuantos mas beats sostienen el ajuste, mas fiable es la cifra.
+    // Es la parte de la confianza que solo crece escuchando.
+    const evidence = clamp(this.beatFit.count / 48, 0, 1);
 
-    let confidence = clamp(best.score, 0, 1) * (0.6 + 0.4 * stability) * (0.72 + 0.28 * agreement);
+    let confidence =
+      clamp(best.score, 0, 1) *
+      (0.6 + 0.4 * stability) *
+      (0.72 + 0.28 * agreement) *
+      (0.62 + 0.38 * evidence);
     if (stage === 'provisional') confidence = Math.min(confidence, 0.55);
     else if (stage === 'stable') confidence = Math.min(confidence, 0.85);
 
     const result: DetectionResult = {
       bpm: Math.round(bpm * 10) / 10,
+      bpmPulse: Math.round(bpmPulse * 10) / 10,
       bpmAlt: Math.round(bpmAlt * 10) / 10,
       meter,
       meterLabel: meterLabel(meter),
@@ -396,6 +571,7 @@ export class TempoEngine {
       nextDownbeatAt: Math.max(now, nextDownbeatAt),
       stage,
       elapsedMs: Math.round(this.elapsedSeconds * 1000),
+      beatsCounted: this.beatFit.count,
       clipping: this.clipFrames > 24,
       level: clamp(this.lastLevel, 0, 1),
       arbiterId: this.verdict?.id ?? this.arbiter?.id ?? null,
@@ -503,6 +679,7 @@ export class TempoEngine {
     this.verdict = null;
     this.lockedPeriod = null;
     this.smoothedBpm = 0;
+    this.beatFit.restart(0, 0);
     this.meterVotes = [];
     this.bpmHistory = [];
     this.clipFrames = 0;

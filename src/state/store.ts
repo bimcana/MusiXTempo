@@ -130,6 +130,7 @@ export const useApp = create<AppState>((set, get) => ({
       id: newId(),
       title: title.trim() || 'Sin título',
       bpm: result.bpm,
+      bpmPulse: result.bpmPulse,
       bpmAlt: result.bpmAlt,
       meter: result.meter,
       subdivision: result.subdivision,

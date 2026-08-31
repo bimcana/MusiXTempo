@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   formatTimeSignature,
   meterLabel,
+  quartersPerPulse,
   subdivisionsPerPulse,
   type TimeSignature
 } from '../dsp/meter';
@@ -442,10 +443,13 @@ function ManualForm({ onDone }: { onDone: () => void }) {
 
   const submit = async () => {
     const grooves = optionsFor(meter);
+    // Lo que el usuario teclea son negras; el pulso se deriva.
+    const pulse = bpm / quartersPerPulse(meter);
     const id = await addManual({
       title: title.trim() || 'Sin título',
       bpm,
-      bpmAlt: bpm * subdivisionsPerPulse(meter),
+      bpmPulse: pulse,
+      bpmAlt: pulse * subdivisionsPerPulse(meter),
       meter,
       subdivision: compound ? 'ternary' : 'binary',
       confidence: 1,
@@ -483,7 +487,8 @@ function ManualForm({ onDone }: { onDone: () => void }) {
         </div>
         {compound && (
           <span className="tabular text-sm text-muted">
-            = {(bpm * 3).toFixed(1)} corcheas · {formatTimeSignature(meter)}
+            pulso {(bpm / quartersPerPulse(meter)).toFixed(1)} ·{' '}
+            {((bpm / quartersPerPulse(meter)) * 3).toFixed(1)} corcheas · {formatTimeSignature(meter)}
           </span>
         )}
       </div>

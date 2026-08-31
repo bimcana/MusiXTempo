@@ -20,7 +20,12 @@ class TapProcessor extends AudioWorkletProcessor {
     this.startTime = 0;
   }
 
-  process(inputs) {
+  process(inputs, outputs) {
+    // La salida se deja en silencio a proposito: existe solo para que el
+    // nodo tenga camino hasta destination y el grafo lo procese siempre.
+    const out = outputs[0];
+    if (out) for (let c = 0; c < out.length; c++) out[c].fill(0);
+
     const input = inputs[0];
     const channel = input && input[0];
     if (!channel) return true;
@@ -52,6 +57,7 @@ export class MicCapture {
   private stream: MediaStream | null = null;
   private node: AudioWorkletNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
+  private sink: GainNode | null = null;
 
   constructor(private readonly handlers: CaptureHandlers) {}
 
@@ -121,7 +127,8 @@ export class MicCapture {
     this.source = this.ctx.createMediaStreamSource(this.stream);
     this.node = new AudioWorkletNode(this.ctx, 'musixtempo-tap', {
       numberOfInputs: 1,
-      numberOfOutputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [1],
       processorOptions: { blockSize: 2048 }
     });
 
@@ -132,17 +139,29 @@ export class MicCapture {
       this.handlers.onError?.(new Error('El procesador de audio se detuvo.'));
     };
 
+    // El grafo de Web Audio solo procesa con garantia los nodos que
+    // alcanzan destination. Un worklet colgando sin salida puede
+    // ejecutarse a trompicones o no ejecutarse: el audio llegaria a
+    // saltos, el motor contaria mal el tiempo transcurrido y todo el
+    // escalonado se desplazaria. De ahi este sumidero a ganancia cero,
+    // que no suena pero mantiene la cadena viva.
+    this.sink = this.ctx.createGain();
+    this.sink.gain.value = 0;
     this.source.connect(this.node);
+    this.node.connect(this.sink);
+    this.sink.connect(this.ctx.destination);
   }
 
   stop(): void {
     this.node?.port.close();
     this.node?.disconnect();
+    this.sink?.disconnect();
     this.source?.disconnect();
     for (const track of this.stream?.getTracks() ?? []) track.stop();
     void this.ctx?.close();
     this.node = null;
     this.source = null;
+    this.sink = null;
     this.stream = null;
     this.ctx = null;
   }

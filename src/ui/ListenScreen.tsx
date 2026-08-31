@@ -21,6 +21,7 @@ export function ListenScreen() {
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [octaveShift, setOctaveShift] = useState(1);
+  const [elapsed, setElapsed] = useState(0);
 
   const detectorRef = useRef<Detector | null>(null);
   const resultRef = useRef<DetectionResult | null>(null);
@@ -30,6 +31,16 @@ export function ListenScreen() {
   useEffect(() => {
     return () => detectorRef.current?.stop();
   }, []);
+
+  // Cronometro propio: el `elapsedMs` del motor solo llega con cada
+  // resultado, y entre resultados la pantalla quedaria congelada.
+  useEffect(() => {
+    if (phase !== 'listening') return;
+    const started = performance.now();
+    setElapsed(0);
+    const id = setInterval(() => setElapsed(performance.now() - started), 100);
+    return () => clearInterval(id);
+  }, [phase]);
 
   const start = async () => {
     setError(null);
@@ -70,8 +81,8 @@ export function ListenScreen() {
   const readPulse = useCallback((): PulseState | null => {
     const ctx = detectorRef.current?.audioContext;
     const r = resultRef.current;
-    if (!ctx || !r || r.bpm <= 0) return null;
-    const period = 60 / r.bpm;
+    if (!ctx || !r || r.bpmPulse <= 0) return null;
+    const period = 60 / r.bpmPulse;
     const pulses = pulsesPerBar(r.meter);
     const barDuration = period * pulses;
     const elapsed = ctx.currentTime - r.nextDownbeatAt;
@@ -89,6 +100,7 @@ export function ListenScreen() {
     ? {
         ...result,
         bpm: result.bpm * octaveShift,
+        bpmPulse: result.bpmPulse * octaveShift,
         bpmAlt: result.bpmAlt * octaveShift
       }
     : null;
@@ -141,6 +153,7 @@ export function ListenScreen() {
           {shown ? (
             <BpmDisplay
               bpm={shown.bpm}
+              bpmPulse={shown.bpmPulse}
               bpmAlt={shown.bpmAlt}
               meter={shown.meter}
               meterLabel={shown.meterLabel}
@@ -154,6 +167,15 @@ export function ListenScreen() {
 
           <LevelMeter level={result?.level ?? 0} clipping={result?.clipping ?? false} />
 
+          {/* La media en curso, a la vista. Sin esto la app parece
+              parada mientras acumula, que es justo cuando mas trabaja. */}
+          <p className="tabular text-xs text-muted">
+            {(elapsed / 1000).toFixed(1)} s escuchando
+            {result && result.beatsCounted > 0
+              ? ' · promedio sobre ' + result.beatsCounted + ' pulsos'
+              : ''}
+          </p>
+
           <button
             type="button"
             onClick={stop}
@@ -163,7 +185,7 @@ export function ListenScreen() {
           </button>
 
           <p className="max-w-xs text-center text-xs text-muted">
-            Sigue escuchando: cuanto más tiempo, más afina.
+            Sigue escuchando: la cifra es la media de todos los pulsos, no la última lectura.
           </p>
         </div>
       )}
@@ -172,6 +194,7 @@ export function ListenScreen() {
         <div className="flex w-full max-w-md flex-1 flex-col justify-center gap-6">
           <BpmDisplay
             bpm={shown.bpm}
+            bpmPulse={shown.bpmPulse}
             bpmAlt={shown.bpmAlt}
             meter={shown.meter}
             meterLabel={shown.meterLabel}
