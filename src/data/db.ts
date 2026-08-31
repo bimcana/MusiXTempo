@@ -5,6 +5,7 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { quartersPerPulse, type Subdivision, type TimeSignature } from '../dsp/meter';
+import type { StreamingLinks } from '../songid/types';
 
 export interface Song {
   id: string;
@@ -22,6 +23,8 @@ export interface Song {
   packId: string;
   grooveId: string;
   source: 'detected' | 'manual';
+  /** Como esta catalogada en las plataformas, si se identifico. */
+  links?: StreamingLinks;
   /**
    * Posicion en el orden manual. Menor va antes. Se deja hueco entre
    * valores para que mover al principio o al final sea escribir UNA

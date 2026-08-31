@@ -1,10 +1,15 @@
 /**
  * Packs de sonido.
  *
- * Un pack mapea ROLES a voces. El scheduler solo conoce roles, y un
- * slot puede ser una voz sintetizada o un sample remoto sin que nada
- * mas cambie: anadir tus propios WAV es soltar un pack con URLs, sin
- * tocar una linea del motor.
+ * Un pack mapea ROLES a voces. El scheduler solo conoce roles, y un slot
+ * puede ser una voz sintetizada o un sample remoto sin que nada mas
+ * cambie: anadir tus propios WAV es soltar un pack con URLs, sin tocar
+ * el motor.
+ *
+ * La lista sigue el vocabulario de los clicks de un DAW — Click II de
+ * Pro Tools, Klopfgeist de Logic, los click sounds de Cubase — y va
+ * agrupada por familia para que el desplegable se pueda recorrer sin
+ * leerlo entero.
  */
 
 import type { Role } from './grooves';
@@ -14,9 +19,12 @@ export type PackSlot =
   | { kind: 'synth'; voiceId: string; params?: Partial<VoiceParams> }
   | { kind: 'sample'; url: string; gain?: number };
 
+export type PackFamily = 'Clicks' | 'Madera' | 'Metal' | 'Láminas' | 'Percusión' | 'Kit' | 'Mecánico';
+
 export interface Pack {
   id: string;
   name: string;
+  family: PackFamily;
   description: string;
   slots: Record<Role, PackSlot>;
 }
@@ -27,37 +35,119 @@ const synth = (voiceId: string, params?: Partial<VoiceParams>): PackSlot => ({
   params
 });
 
+/** Kit por defecto bajo los packs de click, para que los grooves suenen igual. */
+const DEFAULT_KIT = {
+  kick: synth('kick808'),
+  snare: synth('snare808'),
+  hat: synth('hatClosed')
+};
+
+/**
+ * Un pack de click: la misma voz en los tres roles de pulso, separada
+ * por altura. Es como suena un click de DAW — no cambia de timbre entre
+ * el uno y el resto, cambia de tono.
+ */
+function clickPack(
+  id: string,
+  name: string,
+  family: PackFamily,
+  description: string,
+  voiceId: string,
+  kit: Partial<Record<'kick' | 'snare' | 'hat', PackSlot>> = {}
+): Pack {
+  return {
+    id,
+    name,
+    family,
+    description,
+    slots: {
+      accent: synth(voiceId),
+      beat: synth(voiceId, { gain: 0.7 }),
+      sub: synth(voiceId, { gain: 0.38, tune: -5, decay: 0.7 }),
+      ...DEFAULT_KIT,
+      ...kit
+    }
+  };
+}
+
 export const PACKS: Pack[] = [
+  // --- Clicks digitales ---
+  clickPack('click', 'Click', 'Clicks', 'El click de toda la vida.', 'click'),
+  clickPack('beep', 'Beep', 'Clicks', 'Cuadrada filtrada, estilo Cubase.', 'beep'),
+  clickPack('blip', 'Blip', 'Clicks', 'Triangular corta, muy limpia.', 'blip'),
+  clickPack('ping', 'Ping', 'Clicks', 'Agudo con cola. Corta sobre banda fuerte.', 'ping'),
+  clickPack('pip', 'Pip', 'Clicks', 'Lo más breve posible. Casi un tick.', 'pip'),
+  clickPack('noiseClick', 'Click de ruido', 'Clicks', 'Sin altura definida: no choca con la tonalidad.', 'noiseClick'),
+
+  // --- Madera ---
+  clickPack('woodblock', 'Woodblock', 'Madera', 'El clásico de Logic. Corta sin ser estridente.', 'woodblock'),
+  clickPack('woodblockLow', 'Woodblock grave', 'Madera', 'Más cuerpo, menos fatiga en ensayos largos.', 'woodblockLow'),
+  clickPack('templeBlock', 'Temple block', 'Madera', 'Madera hueca, cálido.', 'templeBlock'),
+  clickPack('clave', 'Clave', 'Madera', 'Seco y muy agudo. Atraviesa cualquier mezcla.', 'clave'),
+  clickPack('castanet', 'Castañuela', 'Madera', 'Ataque brevísimo, sin altura.', 'castanet'),
+  clickPack('stick', 'Baquetas', 'Madera', 'Dos baquetas. Lo más parecido a contar en vivo.', 'stick', {
+    kick: synth('kickAcoustic'),
+    snare: synth('rim')
+  }),
+  clickPack('rim', 'Rim', 'Madera', 'Aro de caja, con algo de cuerpo.', 'rim'),
+  clickPack('sidestick', 'Cross-stick', 'Madera', 'Baqueta cruzada sobre el parche.', 'sidestick', {
+    kick: synth('kickAcoustic'),
+    snare: synth('snare808', { tone: 0.65 })
+  }),
+
+  // --- Metal ---
+  clickPack('bell', 'Campana', 'Metal', 'Suave y con cola. Para ensayar sin fatiga.', 'bell'),
+  clickPack('cowbell', 'Cencerro', 'Metal', 'El 808 de siempre. Imposible de perder.', 'cowbell'),
   {
-    id: 'classic',
-    name: 'Clásico',
-    description: 'El click de toda la vida, con kit 808 debajo.',
+    id: 'agogo',
+    name: 'Agogo',
+    family: 'Metal',
+    description: 'Dos campanas: aguda en el uno, grave en el resto.',
+    slots: {
+      accent: synth('agogoHigh'),
+      beat: synth('agogoLow'),
+      sub: synth('agogoLow', { gain: 0.35, decay: 0.6 }),
+      ...DEFAULT_KIT
+    }
+  },
+  clickPack('triangle', 'Triángulo', 'Metal', 'Cola larga y brillante.', 'triangle'),
+  clickPack('cymbal', 'Platillo', 'Metal', 'Ruido metálico ancho.', 'cymbal'),
+
+  // --- Láminas ---
+  clickPack('marimba', 'Marimba', 'Láminas', 'Con altura y cuerpo. Estilo Click II.', 'marimba'),
+  clickPack('vibraphone', 'Vibráfono', 'Láminas', 'Cola larga, muy poco agresivo.', 'vibraphone'),
+  clickPack('glockenspiel', 'Glockenspiel', 'Láminas', 'Brillante y penetrante.', 'glockenspiel'),
+  clickPack('kalimba', 'Kalimba', 'Láminas', 'Cálido, con ataque de púa.', 'kalimba'),
+
+  // --- Percusión ---
+  clickPack('shaker', 'Shaker', 'Percusión', 'Sin altura, muy discreto.', 'shaker'),
+  clickPack('cabasa', 'Cabasa', 'Percusión', 'Como un shaker con más grano.', 'cabasa'),
+  clickPack('tambourine', 'Pandereta', 'Percusión', 'Brillante y con cola.', 'tambourine'),
+  clickPack('clap', 'Palmada', 'Percusión', 'Tres reflexiones, como una palmada real.', 'clap'),
+  clickPack('snap', 'Chasquido', 'Percusión', 'Chasquido de dedos, muy corto.', 'snap'),
+  clickPack('conga', 'Conga', 'Percusión', 'Parche grave con ataque de mano.', 'conga'),
+  clickPack('bongo', 'Bongo', 'Percusión', 'Parche agudo, seco.', 'bongo'),
+
+  // --- Kit de batería ---
+  {
+    id: 'kit808',
+    name: 'Kit 808',
+    family: 'Kit',
+    description: 'Caja de ritmos clásica.',
     slots: {
       accent: synth('blip', { tune: 2 }),
       beat: synth('click'),
-      sub: synth('click', { gain: 0.4, tune: -5 }),
+      sub: synth('click', { gain: 0.38, tune: -5 }),
       kick: synth('kick808'),
       snare: synth('snare808'),
       hat: synth('hatClosed')
     }
   },
   {
-    id: 'wood',
-    name: 'Madera',
-    description: 'Woodblock y clave. Corta bien encima de una banda.',
-    slots: {
-      accent: synth('clave'),
-      beat: synth('woodblock'),
-      sub: synth('stick', { gain: 0.45 }),
-      kick: synth('kickAcoustic'),
-      snare: synth('rim'),
-      hat: synth('shaker')
-    }
-  },
-  {
-    id: 'electro',
-    name: 'Electro',
-    description: 'Beeps limpios y kit 909.',
+    id: 'kit909',
+    name: 'Kit 909',
+    family: 'Kit',
+    description: 'Más ataque y más brillo que el 808.',
     slots: {
       accent: synth('beep', { tune: 5, tone: 0.8 }),
       beat: synth('beep'),
@@ -68,9 +158,10 @@ export const PACKS: Pack[] = [
     }
   },
   {
-    id: 'acoustic',
-    name: 'Acústico',
-    description: 'Baqueta y bombo acústico. El más cercano a una batería.',
+    id: 'kitAcoustic',
+    name: 'Kit acústico',
+    family: 'Kit',
+    description: 'Lo más cercano a una batería real.',
     slots: {
       accent: synth('stick', { tune: 4 }),
       beat: synth('stick'),
@@ -81,34 +172,35 @@ export const PACKS: Pack[] = [
     }
   },
   {
-    id: 'perc',
-    name: 'Percusión',
-    description: 'Cencerro, pandereta y palmadas.',
+    id: 'kitLatin',
+    name: 'Kit latino',
+    family: 'Kit',
+    description: 'Congas, bongos y cencerro.',
     slots: {
       accent: synth('cowbell'),
       beat: synth('clave', { gain: 0.7 }),
       sub: synth('shaker', { gain: 0.45 }),
-      kick: synth('kick808', { tune: 3, decay: 0.7 }),
-      snare: synth('clap'),
-      hat: synth('tambourine')
+      kick: synth('conga', { tune: -5 }),
+      snare: synth('bongo'),
+      hat: synth('cabasa')
     }
   },
-  {
-    id: 'bells',
-    name: 'Campanas',
-    description: 'Suave, para ensayar sin fatiga auditiva.',
-    slots: {
-      accent: synth('bell', { tune: 5 }),
-      beat: synth('bell', { gain: 0.6 }),
-      sub: synth('blip', { gain: 0.3 }),
-      kick: synth('kick808', { decay: 1.3 }),
-      snare: synth('rim'),
-      hat: synth('shaker', { gain: 0.5 })
-    }
-  }
+
+  // --- Mecánico ---
+  clickPack('mechanical', 'Metrónomo mecánico', 'Mecánico', 'Tic y tac de madera, como el de cuerda.', 'mechanical')
 ];
 
-export const DEFAULT_PACK_ID = 'classic';
+export const PACK_FAMILIES: PackFamily[] = [
+  'Clicks',
+  'Madera',
+  'Metal',
+  'Láminas',
+  'Percusión',
+  'Kit',
+  'Mecánico'
+];
+
+export const DEFAULT_PACK_ID = 'click';
 
 export function findPack(id: string): Pack {
   return PACKS.find((p) => p.id === id) ?? PACKS[0];

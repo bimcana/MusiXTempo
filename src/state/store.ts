@@ -17,6 +17,7 @@ import {
   writeSetting,
   type Song
 } from '../data/db';
+import type { StreamingLinks } from '../songid/types';
 import { DEFAULT_PACK_ID } from '../metronome/packs';
 import { optionsFor } from '../metronome/grooves';
 
@@ -61,7 +62,11 @@ interface AppState {
   setQuery: (query: string) => void;
   setSortMode: (mode: SortMode) => void;
   visibleSongs: () => Song[];
-  saveDetection: (title: string, result: DetectionResult) => Promise<string>;
+  saveDetection: (
+    title: string,
+    result: DetectionResult,
+    links?: StreamingLinks
+  ) => Promise<string>;
   addManual: (
     input: Omit<Song, 'id' | 'createdAt' | 'updatedAt' | 'source' | 'order'>
   ) => Promise<string>;
@@ -124,7 +129,7 @@ export const useApp = create<AppState>((set, get) => ({
     return sorted;
   },
 
-  saveDetection: async (title, result) => {
+  saveDetection: async (title, result, links) => {
     const grooves = optionsFor(result.meter);
     const song: Song = {
       id: newId(),
@@ -138,6 +143,7 @@ export const useApp = create<AppState>((set, get) => ({
       packId: DEFAULT_PACK_ID,
       grooveId: (grooves.find((g) => !g.id.startsWith('click-')) ?? grooves[0]).id,
       source: 'detected',
+      links,
       order: orderBounds(get().songs).first - ORDER_GAP,
       createdAt: Date.now(),
       updatedAt: Date.now()

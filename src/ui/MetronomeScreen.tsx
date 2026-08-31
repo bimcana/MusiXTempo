@@ -9,12 +9,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pulsesPerBar, quartersPerPulse, subdivisionsPerPulse } from '../dsp/meter';
 import { optionsFor } from '../metronome/grooves';
-import { PACKS } from '../metronome/packs';
+import { PACKS, findPack } from '../metronome/packs';
 import { Metronome } from '../metronome/scheduler';
 import { isIos } from '../audio/ios-unlock';
 import { useApp } from '../state/store';
 import type { Song } from '../data/db';
-import { PulseCanvas, Segmented, StepGrid, TapTempo, type PulseState } from './components';
+import { PulseCanvas, Segmented, Select, StepGrid, TapTempo, type PulseState } from './components';
 
 export function MetronomeScreen({ song }: { song: Song }) {
   const updateSong = useApp((s) => s.updateSong);
@@ -22,7 +22,9 @@ export function MetronomeScreen({ song }: { song: Song }) {
 
   const [bpm, setBpm] = useState(song.bpm);
   const [grooveId, setGrooveId] = useState(song.grooveId);
-  const [packId, setPackId] = useState(song.packId);
+  // Se normaliza al cargar: una cancion guardada con un pack que ya no
+  // existe dejaria el desplegable en blanco, sin valor seleccionado.
+  const [packId, setPackId] = useState(() => findPack(song.packId).id);
   const [volume, setVolume] = useState(0.8);
   const [running, setRunning] = useState(false);
 
@@ -190,11 +192,12 @@ export function MetronomeScreen({ song }: { song: Song }) {
         onChange={setGrooveId}
       />
 
-      <Segmented
+      <Select
         label="Sonido"
         value={packId}
-        options={PACKS.map((p) => ({ value: p.id, label: p.name }))}
+        options={PACKS.map((p) => ({ value: p.id, label: p.name, group: p.family }))}
         onChange={setPackId}
+        hint={findPack(packId).description}
       />
 
       <div>

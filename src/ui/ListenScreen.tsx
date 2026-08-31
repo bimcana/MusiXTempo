@@ -4,12 +4,18 @@
  * El estado visual del numero ES la confianza: gris mientras es
  * provisional, solido cuando se asienta. La app no finge saber lo que
  * todavia no sabe.
+ *
+ * La identificacion de cancion se lanza al PARAR, nunca mientras
+ * escucha: el tempo es el objetivo principal y no comparte recursos con
+ * nada.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Detector } from '../audio/detector';
 import type { DetectionResult } from '../dsp/engine';
 import { pulsesPerBar } from '../dsp/meter';
+import { identifySnippet } from '../songid/client';
+import type { IdentifyResult, StreamingLinks } from '../songid/types';
 import { useApp } from '../state/store';
 import { BpmDisplay, LevelMeter, PulseCanvas, type PulseState } from './components';
 
@@ -22,15 +28,16 @@ export function ListenScreen() {
   const [title, setTitle] = useState('');
   const [octaveShift, setOctaveShift] = useState(1);
   const [elapsed, setElapsed] = useState(0);
+  const [identifying, setIdentifying] = useState(false);
+  const [identity, setIdentity] = useState<IdentifyResult | null>(null);
 
   const detectorRef = useRef<Detector | null>(null);
   const resultRef = useRef<DetectionResult | null>(null);
+  const snapshotRef = useRef<{ samples: Float32Array; sampleRate: number } | null>(null);
   const saveDetection = useApp((s) => s.saveDetection);
   const openSong = useApp((s) => s.openSong);
 
-  useEffect(() => {
-    return () => detectorRef.current?.stop();
-  }, []);
+  useEffect(() => () => detectorRef.current?.stop(), []);
 
   // Cronometro propio: el `elapsedMs` del motor solo llega con cada
   // resultado, y entre resultados la pantalla quedaria congelada.
@@ -45,8 +52,11 @@ export function ListenScreen() {
   const start = async () => {
     setError(null);
     setResult(null);
+    setIdentity(null);
     resultRef.current = null;
+    snapshotRef.current = null;
     setOctaveShift(1);
+    setTitle('');
 
     const detector = new Detector({
       onResult: (r) => {
@@ -72,10 +82,34 @@ export function ListenScreen() {
     }
   };
 
+  const runIdentification = useCallback(async () => {
+    const snapshot = snapshotRef.current;
+    if (!snapshot) return;
+    setIdentifying(true);
+    try {
+      const outcome = await identifySnippet(snapshot.samples, snapshot.sampleRate);
+      setIdentity(outcome);
+      if (outcome.status === 'found') {
+        setTitle((current) => current || outcome.match.artist + ' — ' + outcome.match.title);
+      }
+    } finally {
+      setIdentifying(false);
+    }
+  }, []);
+
   const stop = () => {
+    // El fragmento se toma ANTES de parar: `stop()` libera la captura y
+    // con ella el audio que habria que enviar a identificar.
+    snapshotRef.current = detectorRef.current?.snapshot() ?? null;
     detectorRef.current?.stop();
     detectorRef.current = null;
-    setPhase(resultRef.current ? 'result' : 'idle');
+
+    if (!resultRef.current) {
+      setPhase('idle');
+      return;
+    }
+    setPhase('result');
+    void runIdentification();
   };
 
   const readPulse = useCallback((): PulseState | null => {
@@ -85,8 +119,8 @@ export function ListenScreen() {
     const period = 60 / r.bpmPulse;
     const pulses = pulsesPerBar(r.meter);
     const barDuration = period * pulses;
-    const elapsed = ctx.currentTime - r.nextDownbeatAt;
-    const wrapped = ((elapsed % barDuration) + barDuration) % barDuration;
+    const sinceDownbeat = ctx.currentTime - r.nextDownbeatAt;
+    const wrapped = ((sinceDownbeat % barDuration) + barDuration) % barDuration;
     const phaseValue = wrapped / barDuration;
     return {
       phase: phaseValue,
@@ -107,11 +141,13 @@ export function ListenScreen() {
 
   const save = async () => {
     if (!shown) return;
-    const id = await saveDetection(title, shown);
+    const links = identity?.status === 'found' ? identity.match.links : undefined;
+    const id = await saveDetection(title, shown, links);
     setPhase('idle');
     setResult(null);
     resultRef.current = null;
     setTitle('');
+    setIdentity(null);
     openSong(id);
   };
 
@@ -120,6 +156,7 @@ export function ListenScreen() {
     setResult(null);
     resultRef.current = null;
     setTitle('');
+    setIdentity(null);
   };
 
   return (
@@ -130,7 +167,7 @@ export function ListenScreen() {
         </div>
       )}
 
-      {phase === 'idle' && !result && (
+      {phase === 'idle' && (
         <div className="flex flex-1 flex-col items-center justify-center gap-8">
           <p className="max-w-xs text-center text-muted">
             Pon la música cerca del micrófono. También vale un tarareo, si es continuo.
@@ -191,7 +228,7 @@ export function ListenScreen() {
       )}
 
       {phase === 'result' && shown && (
-        <div className="flex w-full max-w-md flex-1 flex-col justify-center gap-6">
+        <div className="flex w-full max-w-md flex-1 flex-col justify-center gap-5">
           <BpmDisplay
             bpm={shown.bpm}
             bpmPulse={shown.bpmPulse}
@@ -227,6 +264,12 @@ export function ListenScreen() {
             </button>
           </div>
 
+          <Identification
+            state={identity}
+            busy={identifying}
+            onRetry={() => void runIdentification()}
+          />
+
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -252,6 +295,93 @@ export function ListenScreen() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Identificacion                                                      */
+/* ------------------------------------------------------------------ */
+
+const PLATFORMS: { key: keyof StreamingLinks; label: string }[] = [
+  { key: 'spotify', label: 'Spotify' },
+  { key: 'appleMusic', label: 'Apple Music' },
+  { key: 'youtube', label: 'YouTube' },
+  { key: 'deezer', label: 'Deezer' }
+];
+
+function Identification(props: {
+  state: IdentifyResult | null;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  if (props.busy) {
+    return (
+      <div className="rounded-lg border border-line bg-surface px-4 py-3 text-sm text-muted">
+        Identificando la canción…
+      </div>
+    );
+  }
+  if (!props.state) return null;
+
+  if (props.state.status === 'found') {
+    const { match } = props.state;
+    const links = PLATFORMS.filter((p) => match.links[p.key]);
+    return (
+      <div className="rounded-lg border border-signal/40 bg-surface px-4 py-3">
+        <p className="truncate font-medium">{match.title}</p>
+        <p className="truncate text-sm text-muted">
+          {match.artist}
+          {match.album ? ' · ' + match.album : ''}
+        </p>
+        {links.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {links.map((p) => (
+              <a
+                key={p.key}
+                href={match.links[p.key]}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded border border-line px-2.5 py-1 text-xs text-signal no-underline"
+              >
+                {p.label}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (props.state.status === 'not-found') {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-3">
+        <span className="text-sm text-muted">
+          <strong className="text-ink">No encontrada</strong> en las plataformas. Escribe el título
+          tú.
+        </span>
+        <button type="button" onClick={props.onRetry} className="shrink-0 text-xs text-signal">
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
+  if (props.state.status === 'unconfigured') {
+    // Distinto de "no encontrada", y el usuario merece saber cual es.
+    return (
+      <p className="text-xs text-muted">
+        Identificación de canción no configurada. El tempo funciona igual: no depende de la nube.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-3">
+      <span className="text-sm text-muted">{props.state.message}</span>
+      <button type="button" onClick={props.onRetry} className="shrink-0 text-xs text-signal">
+        Reintentar
+      </button>
     </div>
   );
 }

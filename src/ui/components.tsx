@@ -307,6 +307,71 @@ export function Segmented<T extends string>(props: {
   );
 }
 
+/**
+ * Desplegable con grupos. Es un `<select>` nativo a proposito: en movil
+ * abre el selector del sistema, que para una lista de treinta sonidos se
+ * recorre mucho mejor que cualquier lista propia — y ademas es accesible
+ * de serie.
+ */
+export function Select<T extends string>(props: {
+  label?: string;
+  value: T;
+  options: { value: T; label: string; group?: string }[];
+  onChange: (value: T) => void;
+  hint?: string;
+}) {
+  const groups: { name: string; items: typeof props.options }[] = [];
+  for (const option of props.options) {
+    const name = option.group ?? '';
+    const last = groups[groups.length - 1];
+    if (last && last.name === name) last.items.push(option);
+    else groups.push({ name, items: [option] });
+  }
+
+  return (
+    <div>
+      {props.label && (
+        <div className="mb-1.5 text-[0.65rem] tracking-[0.14em] text-muted uppercase">
+          {props.label}
+        </div>
+      )}
+      <div className="relative">
+        <select
+          value={props.value}
+          onChange={(e) => props.onChange(e.target.value as T)}
+          aria-label={props.label}
+          className="w-full appearance-none rounded-lg border border-line bg-surface py-3 pr-10 pl-4 text-ink outline-none focus:border-signal"
+        >
+          {groups.map((group, i) =>
+            group.name ? (
+              <optgroup key={group.name + i} label={group.name}>
+                {group.items.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : (
+              group.items.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))
+            )
+          )}
+        </select>
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-signal"
+        >
+          ▾
+        </span>
+      </div>
+      {props.hint && <p className="mt-1.5 text-xs text-muted">{props.hint}</p>}
+    </div>
+  );
+}
+
 const METER_CHOICES: TimeSignature[] = [
   { beatsPerBar: 4, beatUnit: 4 },
   { beatsPerBar: 6, beatUnit: 8 },
