@@ -11,7 +11,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Detector } from '../audio/detector';
+import { Detector, type CaptureMode } from '../audio/detector';
+import { systemCaptureSupported } from '../audio/system-capture';
 import type { DetectionResult } from '../dsp/engine';
 import { pulsesPerBar } from '../dsp/meter';
 import { identifySnippet } from '../songid/client';
@@ -49,7 +50,7 @@ export function ListenScreen() {
     return () => clearInterval(id);
   }, [phase]);
 
-  const start = async () => {
+  const start = async (mode: CaptureMode = 'mic') => {
     setError(null);
     setResult(null);
     setIdentity(null);
@@ -68,7 +69,7 @@ export function ListenScreen() {
     detectorRef.current = detector;
 
     try {
-      await detector.start();
+      await detector.start(mode);
       setPhase('listening');
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -174,12 +175,27 @@ export function ListenScreen() {
           </p>
           <button
             type="button"
-            onClick={start}
+            onClick={() => void start('mic')}
             className="flex h-44 w-44 flex-col items-center justify-center gap-2 rounded-full border-2 border-signal bg-signal-dim text-signal transition-transform active:scale-95"
           >
             <span className="text-4xl leading-none">●</span>
             <span className="text-sm tracking-[0.18em] uppercase">Escuchar</span>
           </button>
+
+          {/* La leccion de la sesion del 30-08: cuando la musica suena
+              EN ESTE equipo, el microfono recoge altavoz + sala + el
+              cancelador de eco del sistema destrozando la senal. La
+              captura digital de la pestana da la senal limpia con la
+              que el motor rinde su 0.1 % de error. */}
+          {systemCaptureSupported() && (
+            <button
+              type="button"
+              onClick={() => void start('system')}
+              className="rounded-lg border border-line bg-surface px-5 py-3 text-sm text-muted transition-colors active:border-signal active:text-signal"
+            >
+              🖥 ¿La música suena en este equipo? Captura su audio
+            </button>
+          )}
         </div>
       )}
 
@@ -203,6 +219,23 @@ export function ListenScreen() {
           )}
 
           <LevelMeter level={result?.level ?? 0} clipping={result?.clipping ?? false} />
+
+          {result && result.key && result.key.confidence > 0.25 && (
+            <p className="tabular text-sm text-muted">
+              Tonalidad <span className="text-ink">{result.key.name}</span>
+              <span className="text-muted"> · {result.key.camelot} · {result.key.openKey}</span>
+            </p>
+          )}
+
+          {/* Senal debil sostenida: el diagnostico mas util que la app
+              puede dar, porque cada causa tiene remedio distinto. */}
+          {result && elapsed > 6000 && result.level < 0.05 && !result.clipping && (
+            <p className="max-w-sm text-center text-xs text-danger">
+              Señal muy baja. Sube el volumen o acércate a la fuente; si la música suena en este
+              equipo, usa «Captura su audio» — el micrófono la recibe destrozada por el cancelador
+              de eco del sistema.
+            </p>
+          )}
 
           {/* La media en curso, a la vista. Sin esto la app parece
               parada mientras acumula, que es justo cuando mas trabaja. */}
@@ -238,6 +271,13 @@ export function ListenScreen() {
             stage={shown.stage}
             confidence={shown.confidence}
           />
+
+          {shown.key && shown.key.confidence > 0.25 && (
+            <p className="tabular text-center text-sm text-muted">
+              Tonalidad <span className="text-ink">{shown.key.name}</span>
+              <span> · {shown.key.camelot} · {shown.key.openKey}</span>
+            </p>
+          )}
 
           <div className="flex items-center justify-center gap-3">
             <span className="text-xs tracking-[0.14em] text-muted uppercase">Octava</span>

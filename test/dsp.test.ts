@@ -8,6 +8,7 @@ import {
   robustMean
 } from '../src/dsp/core';
 import { computeTempogram, fitTempo, trackBeats } from '../src/dsp/tempo';
+import { estimateKey } from '../src/dsp/key';
 import {
   analyzeSubdivision,
   analyzeGrouping,
@@ -208,6 +209,53 @@ describe('cifra de compas', () => {
     expect(subdivisionsPerPulse({ beatsPerBar: 6, beatUnit: 8 })).toBe(3);
     expect(subdivisionsPerPulse({ beatsPerBar: 4, beatUnit: 4 })).toBe(2);
     expect(subdivisionsPerPulse({ beatsPerBar: 12, beatUnit: 8 })).toBe(3);
+  });
+});
+
+describe('tonalidad', () => {
+  it('reconoce Do mayor desde un croma de triada', () => {
+    const chroma = new Float32Array(12);
+    chroma[0] = 5; // Do
+    chroma[4] = 3; // Mi
+    chroma[7] = 4; // Sol
+    chroma[2] = 1; // Re, algo de escala
+    chroma[9] = 1; // La
+    const key = estimateKey(chroma);
+    expect(key).not.toBeNull();
+    expect(key!.name).toBe('C');
+    expect(key!.camelot).toBe('8B');
+    expect(key!.openKey).toBe('1d');
+  });
+
+  it('reconoce La menor y sus notaciones DJ', () => {
+    const chroma = new Float32Array(12);
+    chroma[9] = 5; // La
+    chroma[0] = 4; // Do
+    chroma[4] = 3; // Mi
+    chroma[11] = 1; // Si
+    chroma[2] = 1; // Re
+    const key = estimateKey(chroma);
+    expect(key).not.toBeNull();
+    expect(key!.name).toBe('Am');
+    expect(key!.camelot).toBe('8A');
+    expect(key!.openKey).toBe('1m');
+  });
+
+  it('el circulo de quintas cuadra: Sol mayor es 9B / 2d', () => {
+    const chroma = new Float32Array(12);
+    chroma[7] = 5; // Sol
+    chroma[11] = 3; // Si
+    chroma[2] = 4; // Re
+    chroma[9] = 1; // La
+    chroma[4] = 1; // Mi
+    const key = estimateKey(chroma);
+    expect(key!.name).toBe('G');
+    expect(key!.camelot).toBe('9B');
+    expect(key!.openKey).toBe('2d');
+  });
+
+  it('sin energia armonica no inventa tonalidad', () => {
+    expect(estimateKey(new Float32Array(12))).toBeNull();
   });
 });
 

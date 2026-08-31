@@ -3,13 +3,41 @@
 Escucha lo que suena y dice **a qué velocidad va y en qué compás está**. PWA instalable, sin
 publicación en tiendas, sin cuenta y sin nube.
 
-El objetivo principal es el tempo. El nombre de la canción es secundario y llega en la Fase 2.
+El objetivo principal es el tempo. Cuatro pestañas: **Escuchar** (micrófono o audio del
+sistema), **Tap** (tap tempo clásico), **Buscar** (BPM/tonalidad/compás por nombre, catálogo de
+[GetSongBPM](https://getsongbpm.com)) y **Biblioteca** (todo lo guardado, con metrónomo).
+
+Además de tempo y compás, el motor estima la **tonalidad** (C#m · 12A · 5m — notación clásica,
+Camelot y Open Key) con los perfiles de Krumhansl-Kessler sobre el croma que ya calculaba para
+el compás: cero coste extra, cero nube.
 
 ---
 
 ## Estado
 
-**Fase 1 completa**: detectar → guardar → tocar.
+**Fase 1 completa** — detectar → guardar → tocar — más las lecciones del primer choque con el
+mundo real (30-08-2026): captura de audio del sistema, recuperación automática, tonalidad, tap
+tempo y búsqueda por catálogo.
+
+### El fallo real que reescribió el motor
+
+Una grabación de pantalla de Chrome mostró la app deambulando (`57.9·2/4 → 110.8·3/4 →
+125.3·6/8`) sobre una canción en 6/8 a ~200 ♩, con **13 pulsos acumulados tras 59 segundos**.
+El audio extraído de esa misma grabación, pasado por el motor en frío: **199.8 ♩ · 6/8, error
+0.1 %, convergido en 4 s**. El algoritmo estaba bien; fallaban dos cosas alrededor:
+
+1. **El camino del micrófono con la música sonando en el mismo equipo.** El cancelador de eco
+   del sistema trata la música reproducida como eco a eliminar y entrega un residuo destrozado.
+   Respuesta: botón «Captura su audio» (Chrome/Edge de escritorio, `getDisplayMedia`) — señal
+   digital limpia, sin micrófono, sin sala, sin cancelador.
+2. **Sin salida de un enganche muerto.** El motor arrastraba una hipótesis vieja sin soltarla
+   jamás. Respuesta: liberación automática (racha de reinicios del acumulador o confianza
+   hundida → soltar todo, re-anclar la ventana y re-detectar). Medido con el fixture real:
+   **recuperación en 2.3 s** tras un cambio de tempo de 84→133 de pulso, blindada por test.
+
+La grabación quedó como *fixture* permanente en `test/fixtures/real/` (gitignorado), con tres
+variantes: original, 48 kHz y simulación de sala (eco + compresión + recorte de graves). Las
+tres pasan con error ≤ 1 %.
 
 | Escenario | Accuracy 1 | Accuracy 2 | Métrica exacta | Recall 6/8 | Recall 4/4 |
 |---|---|---|---|---|---|
@@ -209,6 +237,8 @@ audio a una función serverless y recibe un resultado normalizado — nunca ve l
 siquiera sabe qué proveedor hay detrás. Cambiar de uno a otro es una variable de entorno.
 
 Soportados: **ACRCloud** (el más sólido con micrófono en una sala) y **AudD** (API más simple).
+Con `GETSONGBPM_API_KEY` presente, el resultado del song ID se **cruza con el catálogo**: a
+cuánto está la canción catalogada junto a lo medido — las dos cifras se validan mutuamente.
 Configúralo en `.env.local` para desarrollo y en el panel de Vercel o Netlify para producción
 — ver [`.env.example`](.env.example). La función vive en [`api/identify.ts`](api/identify.ts) y
 está escrita contra la API estándar `Request`/`Response`, así que corre igual en Vercel Edge,

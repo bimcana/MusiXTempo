@@ -33,6 +33,7 @@ import {
   toTimeSignature
 } from './meter';
 import type { ArbiterCandidate, TempoArbiter } from '../arbiter/types';
+import { estimateKey, type KeyEstimate } from './key';
 
 export type DetectionStage = 'provisional' | 'stable' | 'refined';
 
@@ -68,6 +69,8 @@ export interface DetectionResult {
   arbiterId: string | null;
   /** Acuerdo entre clasico y arbitro, 0..1. */
   agreement: number;
+  /** Tonalidad estimada sobre toda la escucha, o null si aun no hay. */
+  key: KeyEstimate | null;
 }
 
 export interface EngineOptions {
@@ -241,6 +244,17 @@ export class TempoEngine {
   private arbiterBusy = false;
 
   private lockedPeriod: number | null = null;
+  /**
+   * Punto de partida de la sesion de enganche actual. Tras soltar un
+   * lock viejo, las etapas y las ventanas de compromiso se miden desde
+   * aqui, no desde el arranque: un motor recien liberado vuelve a ser
+   * "provisional" y lo dice, en vez de fingir que sigue refinado.
+   */
+  private stageAnchor = 0;
+  /** Reinicios consecutivos del acumulador: la senal de que el lock murio. */
+  private accumRestartStreak = 0;
+  private lastMeterKey: string | null = null;
+  private lowConfidenceStreak = 0;
   private smoothedBpm = 0;
   private readonly beatFit = new BeatAccumulator();
   private meterVotes: string[] = [];
@@ -248,6 +262,8 @@ export class TempoEngine {
 
   private clipFrames = 0;
   private lastLevel = 0;
+  /** Croma acumulado de la sesion, ponderado por energia. */
+  private readonly keyChroma = new Float64Array(12);
   private last: DetectionResult | null = null;
 
   constructor(deviceSampleRate: number, options: EngineOptions = {}) {
@@ -324,6 +340,10 @@ export class TempoEngine {
         else if (this.clipFrames > 0) this.clipFrames--;
 
         this.lastLevel = this.lastLevel * 0.85 + Math.min(1, frame.rms * 6) * 0.15;
+        // La tonalidad se acumula sobre TODA la escucha: no se resetea
+        // al soltar un lock de tempo, porque la cancion sigue siendo la
+        // misma aunque cambie de seccion.
+        for (let c = 0; c < 12; c++) this.keyChroma[c] += frame.chroma[c] * frame.rms;
         this.frameCount++;
       }
     }
@@ -360,9 +380,16 @@ export class TempoEngine {
   }
 
   private analyze(): DetectionResult | null {
+    // La ventana nunca cruza el ancla: tras soltar un lock viejo, el
+    // primer analisis se hace SOLO sobre lo escuchado desde entonces.
+    // Sin este corte, los 8 s de ventana siguen dominados por el tempo
+    // anterior durante ~6 s mas y el motor re-engancha a basura una y
+    // otra vez — que es exactamente la deriva de la sesion del 30-08.
+    const sinceAnchorFrames = Math.floor(this.sinceAnchor * this.frameRate);
     const winFrames = Math.min(
       this.onsetRing.length,
-      Math.round(this.opts.windowSeconds * this.frameRate)
+      Math.round(this.opts.windowSeconds * this.frameRate),
+      sinceAnchorFrames
     );
     if (winFrames < this.frameRate * 1.5) return null;
 
@@ -456,7 +483,7 @@ export class TempoEngine {
     // suposicion mal informada — que es justo como un tarareo lento
     // acaba leido al doble de velocidad. La adherencia esta para
     // resistir ruido, no para petrificar la primera corazonada.
-    if (this.lockedPeriod !== null && this.elapsedSeconds >= COMMIT_SECONDS) {
+    if (this.lockedPeriod !== null && this.sinceAnchor >= COMMIT_SECONDS) {
       for (const c of scored) {
         if (Math.abs(Math.log2(c.period / this.lockedPeriod)) < 0.03) c.score += 0.08;
       }
@@ -469,6 +496,15 @@ export class TempoEngine {
 
     const sameHypothesis =
       this.lockedPeriod !== null && Math.abs(Math.log2(best.period / this.lockedPeriod)) < 0.03;
+
+    // Al cambiar de nivel de pulso, los votos de compas describen el
+    // nivel ANTERIOR: agrupar de 3 el pulso viejo no dice nada sobre el
+    // nuevo. Arrastrarlos produce una lectura mixta (pulso nuevo con
+    // compas viejo) que en pantalla se ve como un bandazo sin sentido.
+    if (!sameHypothesis && this.lockedPeriod !== null) {
+      this.meterVotes = [];
+      this.lastMeterKey = null;
+    }
 
     this.lockedPeriod = sameHypothesis ? this.lockedPeriod! * 0.7 + best.period * 0.3 : best.period;
     this.smoothedBpm = sameHypothesis && this.smoothedBpm > 0
@@ -484,15 +520,26 @@ export class TempoEngine {
     }
     // La media tampoco empieza antes de tiempo: acumular los primeros
     // segundos solo mete en el promedio la parte menos fiable.
-    if (this.elapsedSeconds < COMMIT_SECONDS) {
+    if (this.sinceAnchor < COMMIT_SECONDS) {
       this.beatFit.restart(periodSeconds, beatTimes[0] ?? 0);
     } else {
+      let restarted = false;
       if (!sameHypothesis || this.beatFit.count === 0) {
         this.beatFit.restart(periodSeconds, beatTimes[0] ?? 0);
+        restarted = !sameHypothesis;
       }
       if (beatTimes.length > 0 && !this.beatFit.add(beatTimes)) {
         this.beatFit.restart(periodSeconds, beatTimes[beatTimes.length - 1]);
+        restarted = true;
       }
+      // Un reinicio suelto es ruido. Una RACHA es un cambio real de
+      // tempo o de cancion: la hipotesis vieja ya no describe lo que
+      // suena, y sostenerla solo alarga la deriva. Se suelta todo y las
+      // etapas vuelven a empezar — la sesion en vivo del 30-08 se paso
+      // un minuto entero en esa deriva por no tener esta salida.
+      if (restarted) this.accumRestartStreak++;
+      else this.accumRestartStreak = 0;
+      if (this.accumRestartStreak >= 3) this.release();
     }
 
     this.bpmHistory.push(this.smoothedBpm);
@@ -507,9 +554,16 @@ export class TempoEngine {
     // Voto de metrica: la moda de las ultimas lecturas, no la ultima.
     const key = best.pulsesPerBar + ':' + best.subdivision;
     this.meterVotes.push(key);
-    if (this.meterVotes.length > 5) this.meterVotes.shift();
+    if (this.meterVotes.length > 7) this.meterVotes.shift();
+    // La moda simple deja pasar el parpadeo: con los votos repartidos,
+    // una sola ventana rara se cuela en pantalla como 15/8. Se exige
+    // mayoria real (>= 3 de 7); sin ella, se mantiene la ultima metrica
+    // que la tuvo. La cifra de compas no deberia parpadear jamas.
     const winner = modeOf(this.meterVotes);
-    const [votedPulses, votedSub] = winner.split(':');
+    const votes = this.meterVotes.filter((v) => v === winner).length;
+    const settled = votes >= 3 || this.lastMeterKey === null ? winner : this.lastMeterKey;
+    if (votes >= 3) this.lastMeterKey = winner;
+    const [votedPulses, votedSub] = settled.split(':');
     const pulses = Number(votedPulses);
     const subdivision = votedSub as Subdivision;
 
@@ -575,15 +629,44 @@ export class TempoEngine {
       clipping: this.clipFrames > 24,
       level: clamp(this.lastLevel, 0, 1),
       arbiterId: this.verdict?.id ?? this.arbiter?.id ?? null,
-      agreement
+      agreement,
+      key: this.elapsedSeconds >= 5 ? estimateKey(this.keyChroma) : null
     };
 
     this.last = result;
+
+    // Confianza hundida de forma sostenida en etapa refinada = el motor
+    // esta perdido y lo sabe. Soltar y re-detectar cuesta ~3 s; seguir
+    // perdido costaba la sesion entera.
+    if (stage === 'refined' && result.confidence < 0.4) {
+      this.lowConfidenceStreak++;
+      if (this.lowConfidenceStreak >= 18) this.release();
+    } else {
+      this.lowConfidenceStreak = 0;
+    }
+
     return result;
   }
 
+  private get sinceAnchor(): number {
+    return this.elapsedSeconds - this.stageAnchor;
+  }
+
+  /** Suelta la hipotesis actual sin tocar las features ya extraidas. */
+  private release(): void {
+    this.lockedPeriod = null;
+    this.verdict = null;
+    this.meterVotes = [];
+    this.lastMeterKey = null;
+    this.bpmHistory = [];
+    this.beatFit.restart(0, 0);
+    this.accumRestartStreak = 0;
+    this.lowConfidenceStreak = 0;
+    this.stageAnchor = this.elapsedSeconds;
+  }
+
   private stageFor(): DetectionStage {
-    const t = this.elapsedSeconds;
+    const t = this.sinceAnchor;
     if (t < 5) return 'provisional';
     if (t < 8) return 'stable';
     return 'refined';
@@ -614,7 +697,8 @@ export class TempoEngine {
 
     const longFrames = Math.min(
       this.onsetRing.length,
-      Math.round(this.opts.longWindowSeconds * this.frameRate)
+      Math.round(this.opts.longWindowSeconds * this.frameRate),
+      Math.floor(this.sinceAnchor * this.frameRate)
     );
     if (longFrames < this.frameRate * 6) return;
 
@@ -681,9 +765,14 @@ export class TempoEngine {
     this.smoothedBpm = 0;
     this.beatFit.restart(0, 0);
     this.meterVotes = [];
+    this.lastMeterKey = null;
+    this.stageAnchor = 0;
+    this.accumRestartStreak = 0;
+    this.lowConfidenceStreak = 0;
     this.bpmHistory = [];
     this.clipFrames = 0;
     this.lastLevel = 0;
+    this.keyChroma.fill(0);
     this.last = null;
   }
 }

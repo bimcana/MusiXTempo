@@ -25,6 +25,8 @@ export interface Song {
   source: 'detected' | 'manual';
   /** Como esta catalogada en las plataformas, si se identifico. */
   links?: StreamingLinks;
+  /** Tonalidad estimada al detectar: "C#m (12A)". */
+  keyName?: string;
   /**
    * Posicion en el orden manual. Menor va antes. Se deja hueco entre
    * valores para que mover al principio o al final sea escribir UNA

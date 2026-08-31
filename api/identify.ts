@@ -62,11 +62,48 @@ export default async function handler(request: Request): Promise<Response> {
   try {
     const result =
       provider === 'acrcloud' ? await identifyWithAcrCloud(audio, env) : await identifyWithAudd(audio, env);
+    // Con la cancion identificada y la clave de GetSongBPM presente, se
+    // cruza con el catalogo: BPM, tonalidad y compas "oficiales" junto a
+    // lo medido. Si el catalogo falla, el resultado va sin el — nunca
+    // se pierde una identificacion por un extra.
+    if (result.status === 'found' && env.GETSONGBPM_API_KEY) {
+      try {
+        result.match.catalog = await lookupCatalog(result.match.artist, result.match.title, env);
+      } catch {
+        /* el catalogo es opcional */
+      }
+    }
     return json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Fallo desconocido.';
     return json({ status: 'error', message }, 502);
   }
+}
+
+async function lookupCatalog(
+  artist: string,
+  title: string,
+  env: Env
+): Promise<SongMatch['catalog']> {
+  const base = env.GETSONGBPM_BASE ?? 'https://api.getsong.co';
+  const lookup = 'song:' + title + ' artist:' + artist;
+  const url =
+    base + '/search/?api_key=' + encodeURIComponent(env.GETSONGBPM_API_KEY!) +
+    '&type=both&lookup=' + encodeURIComponent(lookup);
+  const response = await fetch(url, { headers: { accept: 'application/json' } });
+  if (!response.ok) return undefined;
+  const payload = (await response.json()) as {
+    search?: { tempo?: string; time_sig?: string; key_of?: string; open_key?: string; uri?: string }[];
+  };
+  const hit = Array.isArray(payload.search) ? payload.search[0] : undefined;
+  if (!hit) return undefined;
+  return {
+    bpm: hit.tempo ? Number(hit.tempo) : undefined,
+    timeSignature: hit.time_sig,
+    keyOf: hit.key_of,
+    openKey: hit.open_key,
+    uri: hit.uri
+  };
 }
 
 function pickProvider(env: Env): 'acrcloud' | 'audd' | null {

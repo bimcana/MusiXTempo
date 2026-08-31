@@ -6,6 +6,7 @@
 import type { DetectionResult } from '../dsp/engine';
 import type { FromWorker, ToWorker } from '../worker/protocol';
 import { MicCapture } from './capture';
+import { requestSystemAudio, type SystemStream } from './system-capture';
 
 export interface DetectorHandlers {
   onResult: (result: DetectionResult) => void;
@@ -15,9 +16,12 @@ export interface DetectorHandlers {
 /** Segundos de audio que se guardan para poder identificar la cancion. */
 const SNIPPET_SECONDS = 12;
 
+export type CaptureMode = 'mic' | 'system';
+
 export class Detector {
   private worker: Worker | null = null;
   private capture: MicCapture | null = null;
+  private system: SystemStream | null = null;
 
   /**
    * Buffer circular con los ultimos segundos de audio EN CRUDO. Se llena
@@ -67,8 +71,14 @@ export class Detector {
     return this.capture?.audioContext ?? null;
   }
 
-  async start(): Promise<void> {
+  async start(mode: CaptureMode = 'mic'): Promise<void> {
     if (this.running) return;
+
+    // El dialogo de captura va ANTES de montar nada: si el usuario
+    // cancela, no queda un worker huerfano que desmontar.
+    if (mode === 'system') {
+      this.system = await requestSystemAudio();
+    }
 
     this.worker = new Worker(new URL('../worker/analysis.worker.ts', import.meta.url), {
       type: 'module'
@@ -91,7 +101,7 @@ export class Detector {
     });
 
     try {
-      await this.capture.start();
+      await this.capture.start(this.system?.stream);
     } catch (error) {
       this.stop();
       throw error;
@@ -108,8 +118,10 @@ export class Detector {
 
   stop(): void {
     this.capture?.stop();
+    this.system?.stop();
     this.worker?.terminate();
     this.capture = null;
+    this.system = null;
     this.worker = null;
   }
 }

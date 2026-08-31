@@ -262,6 +262,7 @@ function SongRow(props: {
           <span className="block truncate font-medium">{song.title}</span>
           <span className="text-xs text-muted">
             {song.source === 'manual' ? 'A mano' : 'Detectada'}
+            {song.keyName ? ' · ' + song.keyName : ''}
             {song.source === 'detected' && ' · ' + Math.round(song.confidence * 100) + ' % confianza'}
           </span>
         </span>

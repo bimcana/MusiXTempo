@@ -310,6 +310,48 @@ export function analyzeGrouping(cues: number[]): {
     }
   }
 
+  // Una agrupacion rara (5 o 7) tiene que GANARSE el sitio: si alguna
+  // comun quedo a menos de 0.15, se prefiere la comun. En audio real
+  // las raras aparecen por rachas de ruido, y un 15/8 parpadeando en
+  // pantalla destruye mas confianza de la que cualquier acierto gana.
+  if (bestB === 5 || bestB === 7) {
+    let commonBest = -Infinity;
+    let commonB = 4;
+    let commonPhase = 0;
+    for (const b of [2, 3, 4]) {
+      if (cues.length < b * 2) continue;
+      const bias = PHASE_BIAS_FACTOR * Math.sqrt(2 * Math.log(b));
+      for (let ph = 0; ph < b; ph++) {
+        let onSum = 0;
+        let onN = 0;
+        let offSum = 0;
+        let offN = 0;
+        for (let i = 0; i < cues.length; i++) {
+          if (i % b === ph) {
+            onSum += cues[i];
+            onN++;
+          } else {
+            offSum += cues[i];
+            offN++;
+          }
+        }
+        if (onN < 2 || offN < 2) continue;
+        const adj =
+          (onSum / onN - offSum / offN - bias * Math.sqrt(1 / onN + 1 / offN)) * GROUPING_PRIOR[b];
+        if (adj > commonBest) {
+          commonBest = adj;
+          commonB = b;
+          commonPhase = ph;
+        }
+      }
+    }
+    if (Number.isFinite(commonBest) && bestScore - commonBest < 0.15) {
+      bestB = commonB;
+      bestPhase = commonPhase;
+      bestAdjusted = commonBest;
+    }
+  }
+
   // Degradacion a nivel anidado. Si agrupar en 4 no separa el tiempo 1
   // del 3, no hay 4/4: hay 2/4. Se aplica en cadena, asi que 6 puede
   // bajar a 3 y 4 a 2, pero nunca por debajo de 2.

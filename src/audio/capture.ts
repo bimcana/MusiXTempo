@@ -82,30 +82,44 @@ export class MicCapture {
     return this.node !== null;
   }
 
-  /** Debe llamarse desde un gesto del usuario: iOS no arranca audio sin el. */
-  async start(): Promise<void> {
+  /**
+   * Debe llamarse desde un gesto del usuario: iOS no arranca audio sin
+   * el. Con `external`, en vez de abrir el microfono se analiza ese
+   * stream (p. ej. el audio del sistema via getDisplayMedia).
+   */
+  async start(external?: MediaStream): Promise<void> {
     if (this.node) return;
 
-    const problem = MicCapture.supportCheck();
-    if (problem === 'insecure') {
-      throw new Error('El microfono necesita HTTPS. Abre la app por https:// o localhost.');
-    }
-    if (problem === 'unsupported') {
-      throw new Error('Este navegador no permite acceder al microfono.');
-    }
+    if (external) {
+      this.stream = external;
+      // Si el usuario corta la captura desde la barra del navegador, el
+      // track muere sin pasar por la interfaz: hay que enterarse.
+      const track = external.getAudioTracks()[0];
+      if (track) {
+        track.onended = () => this.handlers.onError?.(new Error('La captura de audio terminó.'));
+      }
+    } else {
+      const problem = MicCapture.supportCheck();
+      if (problem === 'insecure') {
+        throw new Error('El microfono necesita HTTPS. Abre la app por https:// o localhost.');
+      }
+      if (problem === 'unsupported') {
+        throw new Error('Este navegador no permite acceder al microfono.');
+      }
 
-    // Estas tres constraints NO son opcionales. El procesado de voz que
-    // iOS y Android aplican por defecto esta hecho para aplastar todo lo
-    // que no sea habla, y destruiria el analisis ritmico.
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        channelCount: 1
-      },
-      video: false
-    });
+      // Estas tres constraints NO son opcionales. El procesado de voz
+      // que iOS y Android aplican por defecto esta hecho para aplastar
+      // todo lo que no sea habla, y destruiria el analisis ritmico.
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: 1
+        },
+        video: false
+      });
+    }
 
     const Ctor: typeof AudioContext =
       window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;

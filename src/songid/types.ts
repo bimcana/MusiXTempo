@@ -28,6 +28,18 @@ export interface SongMatch {
   /** Confianza del proveedor, 0..1, si la da. */
   score?: number;
   provider: string;
+  /**
+   * Datos del catalogo de GetSongBPM, si la clave esta configurada: a
+   * cuanto esta la cancion CATALOGADA. La medicion dice a cuanto esta
+   * sonando; juntas se validan mutuamente.
+   */
+  catalog?: {
+    bpm?: number;
+    timeSignature?: string;
+    keyOf?: string;
+    openKey?: string;
+    uri?: string;
+  };
 }
 
 export type IdentifyResult =

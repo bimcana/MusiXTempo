@@ -21,7 +21,7 @@ import type { StreamingLinks } from '../songid/types';
 import { DEFAULT_PACK_ID } from '../metronome/packs';
 import { optionsFor } from '../metronome/grooves';
 
-export type Screen = 'listen' | 'library' | 'metronome';
+export type Screen = 'listen' | 'tap' | 'search' | 'library' | 'metronome';
 
 /**
  * `manual` es el orden que el usuario construye con las flechas. Los
@@ -158,6 +158,7 @@ export const useApp = create<AppState>((set, get) => ({
       grooveId: (grooves.find((g) => !g.id.startsWith('click-')) ?? grooves[0]).id,
       source: 'detected',
       links,
+      keyName: result.key ? result.key.name + ' (' + result.key.camelot + ')' : undefined,
       order: orderBounds(get().songs).first - ORDER_GAP,
       createdAt: Date.now(),
       updatedAt: Date.now()
